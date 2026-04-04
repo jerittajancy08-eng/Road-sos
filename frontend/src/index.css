@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dark-bg: #0B0F1A;
+  --color-dark-panel: #111827;
+  --color-neon-red: #FF3366;
+  --color-neon-blue: #00F0FF;
+  --color-neon-green: #00FF66;
+  --color-neon-yellow: #FFD700;
+}
+
+@layer base {
+  body {
+    @apply bg-dark-bg text-gray-100;
+    font-family: 'Poppins', sans-serif;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-dark-panel/60 backdrop-blur-md border border-white/10 shadow-xl rounded-2xl;
+  }
+
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-lg border border-white/10 shadow-lg rounded-xl transition-all hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.05)] hover:scale-[1.02];
+  }
+
+  .neon-glow-red {
+    box-shadow: 0 0 20px rgba(255, 51, 102, 0.5), 0 0 40px rgba(255, 51, 102, 0.2);
+  }
+
+  .neon-glow-red-active {
+    box-shadow: 0 0 30px rgba(255, 51, 102, 0.8), 0 0 60px rgba(255, 51, 102, 0.4);
+  }
+}
+
+/* Animations */
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+@keyframes map-ripple {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+.map-user-beacon {
+  position: relative;
+}
+.map-user-beacon::after {
+  content: '';
+  position: absolute;
+  top: -100%;
+  left: -100%;
+  right: -100%;
+  bottom: -100%;
+  border-radius: 50%;
+  border: 2px solid var(--color-neon-blue);
+  animation: map-ripple 2s infinite ease-out;
+}
+
+.pulse-animation::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  background-color: var(--color-neon-red);
+  border-radius: 50%;
+  z-index: -1;
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+/* Leaflet Map Overrides to fit dark theme */
+.leaflet-container {
+  background: #0B0F1A !important;
+  font-family: 'Poppins', sans-serif !important;
+}
+
+.leaflet-layer,
+.leaflet-control-zoom-in,
+.leaflet-control-zoom-out,
+.leaflet-control-attribution {
+  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
+}
+
+.custom-popup .leaflet-popup-content-wrapper,
+.custom-popup .leaflet-popup-tip {
+  background: rgba(17, 24, 39, 0.9) !important;
+  backdrop-filter: blur(10px);
+  color: white !important;
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+}
