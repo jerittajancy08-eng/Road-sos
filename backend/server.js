@@ -117,23 +117,37 @@ app.post('/api/hospital-alert', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`);
 });*/
-const express = require('express');
-const cors = require('cors');
+const express = require("express");
+const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-
 app.use(cors());
 app.use(express.json());
 
-// simple test route
-app.get('/', (req, res) => {
+let requests = []; // temporary storage
+
+// Test route
+app.get("/", (req, res) => {
   res.send("Backend is running 🚀");
 });
 
-// in-memory data
-let activeEmergencies = [];
+// SOS route
+app.post("/sos", (req, res) => {
+  const { lat, lng, time } = req.body;
 
-app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+  const newRequest = { lat, lng, time };
+  requests.push(newRequest);
+
+  console.log("🚨 SOS RECEIVED:", newRequest);
+
+  res.json({ message: "SOS received" });
+});
+
+// Get all SOS
+app.get("/sos", (req, res) => {
+  res.json(requests);
+});
+
+app.listen(5000, () => {
+  console.log("Server running on port 5000");
 });
