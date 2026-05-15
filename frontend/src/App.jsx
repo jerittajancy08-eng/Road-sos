@@ -1,136 +1,14 @@
-import alertSound from "./assets/alert.mp3";
-import { io } from "socket.io-client";
-import React, { useState, useEffect, useRef } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import React, { useState, useEffect } from "react";
+import { socket } from "./hooks/useSocket";
 import Login from "./login";
 import HelperDashboard from "./components/HelperDashboard";
 import HospitalDashboard from "./components/HospitalDashboard";
 import PoliceDashboard from "./components/PoliceDashboard";
 import UserDashboard from "./components/UserDashboard";
-// Fix marker icon issue
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png",
-  iconUrl:
-    "https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png",
-  shadowUrl:
-    "https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png",
-});
-function getTimeAgo(time) {
-  const diff = Math.floor((Date.now() - time) / 1000);
-  if (diff < 60) return "Now";
-  if (diff < 3600) return Math.floor(diff / 60) + " min ago";
-  return Math.floor(diff / 3600) + " hr ago";
-}
+import SplashScreen from "./components/SplashScreen";
+import "./index.css";
+
 function App() {
-  const showNotification = (msg) => {
-    if (Notification.permission === "granted") {
-      new Notification(msg);
-    } else {
-      Notification.requestPermission();
-    }
-  };
-  const socket = io("http://localhost:5000");
-  const hospitals = [
-    { name: "Apollo Chennai", lat: 13.0827, lng: 80.2707 },
-    { name: "City Care", lat: 13.0674, lng: 80.2376 },
-  ];
-  useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    if (storedUser) {
-      setUser(storedUser);
-    }
-  }, []);
-  const [myLocation, setMyLocation] = useState(null);
-  useEffect(() => {
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const newLoc = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-        };
-
-        setMyLocation(newLoc);
-
-        socket.emit("liveLocation", newLoc);
-      },
-      (err) => console.log(err),
-      { enableHighAccuracy: true }
-    );
-
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
-  const getDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371; // km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(lat1 * Math.PI / 180) *
-      Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return (R * c).toFixed(2);
-  };
-
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [currentSOS, setCurrentSOS] = useState(null);
-  const [requests, setRequests] = useState([
-    { lat: 12.85, lng: 80.07, time: Date.now() },
-    { lat: 12.86, lng: 80.08, time: Date.now() },
-  ]);
-  const helpersNearby = requests.filter(
-    (r) => r.status === "pending"
-  ).length;
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const accidentDetected = Math.random() > 0.7;
-
-      if (accidentDetected) {
-        setShowModal(true);
-        return;
-        sendSOS();
-      }
-    }, 10000);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    socket.on("newSOS", (data) => {
-      setRequests((prev) => [...prev, data]);
-      showNotification("🚨 New SOS nearby!");
-      setCurrentSOS(data);
-      setShowModal(true);
-
-      if (audioRef.current) {
-        audioRef.current.play().catch(() => { });
-      }
-    });
-
-    socket.on("statusUpdated", (data) => {
-      setRequests(data);
-    });
-
-    return () => {
-      socket.off("newSOS");
-      socket.off("statusUpdated");
-    };
-  }, []);
-
-  const audioRef = useRef(null);
-  const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(() => {
     try {
       const stored = localStorage.getItem("user");
@@ -139,140 +17,99 @@ function App() {
       return null;
     }
   });
-  useEffect(() => {
-    navigator.geolocation.watchPosition((pos) => {
-      setMyLocation({
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude
-      });
-    });
-  }, []);
+
+  const [requests, setRequests] = useState([]);
+  const [isSplashActive, setIsSplashActive] = useState(true);
+
   useEffect(() => {
     if (user) {
       localStorage.setItem("user", JSON.stringify(user));
+    } else {
+      localStorage.removeItem("user");
     }
   }, [user]);
-  const alarm = new Audio(
-    "https://www.soundjay.com/buttons/beep-01a.mp3"
-  );
-  <audio ref={audioRef} src={alertSound} />
 
-  const getSOS = () => {
-    setLoading(true);
+  useEffect(() => {
     fetch("http://localhost:5000/sos")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setRequests(data);
-        }
-      })
-      .catch((err) => console.log(err))
-      .finally(() => setLoading(false)); // ✅ STOP loading
-  };
+      .then(res => res.json())
+      .then(setRequests)
+      .catch(err => console.error("Error fetching SOS:", err));
 
-  const getSeverity = () => {
-    const speed = Math.random() * 100; // simulate
-    const impact = Math.random();
-
-    if (impact > 0.7 || speed > 80) return "high";
-    if (impact > 0.4) return "medium";
-    return "low";
-  };
-  const sendSOS = () => {
-    socket.emit("sendSOS", {
-      lat: myLocation?.lat,
-      lng: myLocation?.lng,
-      time: Date.now(),
-      status: "pending"
-    });
-  };
-  const triggerSOS = () => {
-    navigator.geolocation.getCurrentPosition((pos) => {
-
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-
-      setMyLocation({ lat, lng });
-      // 🔴 send to backend
-      fetch("http://localhost:5000/sos", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: Date.now(),
-          lat,
-          lng,
-          user: user.name,
-          time: Date.now(),
-          status: "pending",
-        }),
-      });
-      // 🟢 update frontend instantly
+    socket.on("newSOS", (data) => {
       setRequests((prev) => {
-        const newReq = {
-          id: Date.now(),
-          lat,
-          lng,
-          user: user.name,
-          time: Date.now(),
-          status: "pending",
-        };
-
-        return [newReq, ...prev];
+         if (prev.find(r => r.id === data.id)) return prev;
+         return [data, ...prev];
       });
     });
-  };
-  const getHospital = (severity) => {
-    if (severity === "high") return "Apollo Hospital";
-    if (severity === "medium") return "City Care";
-    return "General Hospital";
-  };
 
-  if (!user) {
-    return <Login onLogin={setUser} />;
-  }
-  const updateStatus = async (id, status) => {
-    await fetch("http://localhost:5000/update-status", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ id, status }),
+    socket.on("statusUpdated", (data) => {
+      setRequests((prev) => 
+        prev.map(r => r.id === data.sosId ? { ...r, status: data.status } : r)
+      );
     });
-  };
-  const logout = () => {
-    localStorage.removeItem("user");
+
+    socket.on("helperUpdate", (data) => {
+      setRequests((prev) =>
+        prev.map((r) => (r.id === data.sosId ? { ...r, helpers: data.helpers } : r))
+      );
+    });
+
+    return () => {
+      socket.off("newSOS");
+      socket.off("statusUpdated");
+      socket.off("helperUpdate");
+    };
+  }, []);
+
+  const handleLogout = () => {
     setUser(null);
   };
+
+  if (isSplashActive) {
+    return <SplashScreen onComplete={() => setIsSplashActive(false)} />;
+  }
 
   if (!user) {
     return <Login onLogin={setUser} />;
   }
 
   return (
-    <div>
-      <h2>Welcome, {user.name} ({user.role})</h2>
-
-      {user.role === "helper" && (
-        <HelperDashboard
-          requests={requests}
-          updateStatus={updateStatus}
-        />
-      )}
-
-      {user.role === "hospital" && (
-        <HospitalDashboard requests={requests} />
-      )}
-
-      {user.role === "police" && (
-        <PoliceDashboard requests={requests} />
-      )}
-      {user.role === "user" && (
-        <UserDashboard triggerSOS={triggerSOS} />
-      )}
-      <button onClick={logout}>Logout</button>
+    <div className="bg-slate-950 min-h-screen text-slate-100 selection:bg-red-500/30">
+      <main className="pb-24">
+        {user.role === "helper" && <HelperDashboard requests={requests} />}
+        {user.role === "hospital" && <HospitalDashboard requests={requests} />}
+        {user.role === "police" && <PoliceDashboard requests={requests} />}
+        {user.role === "user" && <UserDashboard user={user} />}
+      </main>
+      
+      {/* Global Status Bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-2xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-[4000] shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
+        <div className="flex items-center gap-6">
+           <div className="flex items-center gap-2">
+             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Network Connected</span>
+           </div>
+           <div className="hidden sm:flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-600">
+             <span>Protocol: RoadSOS v2.4</span>
+             <span>Region: Sector 7-G</span>
+           </div>
+        </div>
+        
+        <div className="flex items-center gap-6">
+           <div className="text-right mr-4 hidden md:block">
+              <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Active Session</div>
+              <div className="text-[10px] font-black text-white italic tracking-tight">{user.name} ({user.role.toUpperCase()})</div>
+           </div>
+           <button 
+            onClick={handleLogout}
+            className="bg-white/5 hover:bg-red-600/10 border border-white/10 hover:border-red-500/50 text-slate-400 hover:text-red-500 px-5 py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all active:scale-95"
+          >
+            TERMINATE
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
+
 export default App;
