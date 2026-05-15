@@ -1,0 +1,29 @@
+[
+  {
+    "id": 1,
+    "name": "Apollo Hospital",
+    "lat": 13.0827,
+    "lng": 80.2707,
+    "trauma": true,
+    "bedsAvailable": 12,
+    "eta": 5
+  },
+  {
+    "id": 2,
+    "name": "City Care Hospital",
+    "lat": 13.0674,
+    "lng": 80.2376,
+    "trauma": false,
+    "bedsAvailable": 8,
+    "eta": 7
+  },
+  {
+    "id": 3,
+    "name": "General Hospital",
+    "lat": 13.0500,
+    "lng": 80.2500,
+    "trauma": false,
+    "bedsAvailable": 5,
+    "eta": 10
+  }
+]

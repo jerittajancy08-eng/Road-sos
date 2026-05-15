@@ -1,153 +1,164 @@
-/*const express = require('express');
-const cors = require('cors');
-//const sqlite3 = require('sqlite3').verbose();
-//const path = require('path');
-
-const app = express();
-const PORT = process.env.PORT || 5000;
-
-app.use(cors());
-app.use(express.json());
-
-// Initialize SQLite database
-//const dbFile = path.resolve(__dirname, 'database.sqlite');
-//const db = new sqlite3.Database(dbFile, (err) => {
-if (err) {
-  console.error('Error opening database', err.message);
-} else {
-  console.log('Connected to the SQLite database.');
-
-  // Create Tables
-  db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS services (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        type TEXT,
-        category TEXT,
-        distance TEXT,
-        eta TEXT,
-        lat REAL,
-        lng REAL
-      )`);
-
-    db.run(`CREATE TABLE IF NOT EXISTS cases (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        case_id TEXT,
-        severity TEXT,
-        location TEXT,
-        status TEXT,
-        timestamp TEXT
-      )`);
-
-    // Seed Services if empty
-    db.get("SELECT COUNT(*) AS count FROM services", (err, row) => {
-      if (!err && row.count === 0) {
-        console.log("Seeding Database...");
-        const stmt = db.prepare(`INSERT INTO services (name, type, category, distance, eta, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-
-        // Hospitals
-        stmt.run("City Care Hospital", "Trauma Center", "hospital", "2.5 km", "8 mins", 28.61, 77.21);
-        stmt.run("Green Valley Clinic", "Clinic", "hospital", "4.1 km", "12 mins", 28.62, 77.20);
-
-        // Police
-        stmt.run("Central Police Station", "HQ", "police", "3.0 km", "10 mins", 28.615, 77.215);
-
-        // Towing
-        stmt.run("Rapid Road Assist", "Heavy Towing", "towing", "1.5 km", "5 mins", 28.605, 77.205);
-
-        stmt.finalize();
-      }
-    });
-  });
-}
-});
-
-// Endpoints
-app.get('/api/nearby-services', (req, res) => {
-  db.all("SELECT * FROM services", [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ success: false, error: err.message });
-      return;
-    }
-
-    // Group by category
-    const categorized = { hospitals: [], police: [], towing: [] };
-    rows.forEach(row => {
-      if (row.category === 'hospital') categorized.hospitals.push(row);
-      else if (row.category === 'police') categorized.police.push(row);
-      else if (row.category === 'towing') categorized.towing.push(row);
-    });
-
-    res.json({ success: true, data: categorized });
-  });
-});
-
-app.post('/api/trigger-sos', (req, res) => {
-  const { location, severity, timestamp } = req.body;
-  const caseId = `SOS-${Math.floor(1000 + Math.random() * 9000)}`;
-
-  db.run(`INSERT INTO cases (case_id, severity, location, status, timestamp) VALUES (?, ?, ?, ?, ?)`,
-    [caseId, severity, JSON.stringify(location), 'RESPONDING', timestamp],
-    function (err) {
-      if (err) {
-        return res.status(500).json({ success: false, error: err.message });
-      }
-
-      console.log(`[SOS TRIGGERED] DB Inserted: Case ${caseId}, Severity: ${severity}`);
-
-      // Simulate real-time responses
-      res.json({
-        success: true,
-        message: "SOS Logged and Routed",
-        caseId: caseId,
-        helpersNotified: 3,
-        policeAlerted: true,
-        hospitalRecommended: { name: "City Care Hospital", type: "Trauma Center" }
-      });
-    }
-  );
-});
-
-app.post('/api/hospital-alert', (req, res) => {
-  // Real world: WebSocket broadcast to specific hospital ID
-  console.log(`[HOSPITAL ALERT] Preparing for arrival:`, req.body);
-  res.json({ success: true, message: "Hospital is preparing for arrival" });
-});
-
-app.listen(PORT, () => {
-  console.log(`Backend server running on http://localhost:${PORT}`);
-});*/
-const express = require("express");
+/*const express = require("express");
 const cors = require("cors");
+const http = require("http");
+const { Server: SocketServer } = require("socket.io");
 
 const app = express();
+
+// middleware
 app.use(cors());
 app.use(express.json());
 
-let requests = []; // temporary storage
+// 🔥 create HTTP server + socket
+const server = http.createServer(app);
 
-// Test route
+const io = new SocketServer(server, {
+  cors: {
+    origin: "*",
+  },
+});
+
+// temporary storage
+let requests = [];
+
+// ================= TEST =================
 app.get("/", (req, res) => {
   res.send("Backend is running 🚀");
 });
 
-// SOS route
+// ================= SEND SOS =================
 app.post("/sos", (req, res) => {
-  const { lat, lng, time } = req.body;
+  const { lat, lng, user, role } = req.body;
 
-  const newRequest = { lat, lng, time };
-  requests.push(newRequest);
+  const newSOS = {
+    lat,
+    lng,
+    user: user || "Someone",
+    role: role || "helper",
+    time: Date.now(),
+    status: "pending",
+  };
 
-  console.log("🚨 SOS RECEIVED:", newRequest);
+  requests.push(newSOS);
+
+  console.log("🚨 SOS RECEIVED:", newSOS);
+
+  // 🔥 REALTIME EMIT
+  io.emit("newSOS", newSOS);
 
   res.json({ message: "SOS received" });
 });
 
-// Get all SOS
+// ================= GET ALL =================
 app.get("/sos", (req, res) => {
   res.json(requests);
 });
 
-app.listen(5000, () => {
-  console.log("Server running on port 5000");
+// ================= UPDATE STATUS =================
+app.post("/update-status", (req, res) => {
+  const { id, status } = req.body;
+
+  requests = requests.map((sos, index) =>
+    index === id ? { ...sos, status } : sos
+  );
+
+  // 🔥 broadcast update
+  io.emit("statusUpdated", requests);
+
+  res.json({ success: true });
+});
+io.on("connection", (socket) => {
+  console.log("User connected");
+
+  socket.on("sendSOS", (data) => {
+    io.emit("newSOS", data); // send to everyone
+  });
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected");
+  });
+});
+// ================= START SERVER =================
+server.listen(5000, () => {
+  console.log("🔥 Server running on http://localhost:5000");
+});
+*/
+const express = require("express");
+const http = require("http");
+const cors = require("cors");
+const { Server } = require("socket.io");
+
+const app = express();
+app.use(cors());
+
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+  },
+});
+
+let requests = [];
+
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+
+  // 🚨 When user sends accident
+  socket.on("sendRequest", (data) => {
+    requests.push(data);
+
+    // send to ALL (helper, police, hospital)
+    io.emit("newRequest", data);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
+});
+
+// Additional imports
+const path = require('path');
+
+// Serve static data (hospitals, services) from /data
+app.use('/data', express.static(path.join(__dirname, 'data')));
+
+// Periodic mock accident generation (if no SOS within last 30s)
+setInterval(() => {
+  const now = Date.now();
+  // If no recent SOS, create a mock one
+  const recent = requests.filter(r => now - r.time < 30000);
+  if (recent.length === 0) {
+    const mockSOS = {
+      id: Date.now(),
+      lat: 13.08 + (Math.random() - 0.5) * 0.02,
+      lng: 80.27 + (Math.random() - 0.5) * 0.02,
+      severity: ['high','medium','low'][Math.floor(Math.random()*3)],
+      time: now,
+      status: 'pending',
+    };
+    requests.push(mockSOS);
+    io.emit('newSOS', mockSOS);
+  }
+}, 15000);
+
+// Periodic mock helper acceptance for pending SOS requests
+setInterval(() => {
+  const pending = requests.filter(r => r.status === 'pending');
+  if (pending.length === 0) return;
+  const target = pending[Math.floor(Math.random()*pending.length)];
+  const helper = {
+    helperId: 'helper_' + Math.floor(Math.random()*1000),
+    name: 'Helper ' + Math.floor(Math.random()*100),
+    contact: '+91' + (9000000000 + Math.floor(Math.random()*1000000)),
+  };
+  // Update request with helper info
+  target.helpers = target.helpers || [];
+  target.helpers.push(helper);
+  io.emit('helperUpdate', { sosId: target.id, helpers: target.helpers });
+}, 10000);
+
+
+server.listen(5000, () => {
+  console.log("🔥 Server running on port 5000");
 });

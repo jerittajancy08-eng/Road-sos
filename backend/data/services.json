@@ -1,0 +1,30 @@
+[
+  {
+    "id": 1,
+    "type": "hospital",
+    "name": "Apollo Hospital",
+    "lat": 13.0827,
+    "lng": 80.2707
+  },
+  {
+    "id": 2,
+    "type": "police",
+    "name": "City Police Station",
+    "lat": 13.0850,
+    "lng": 80.2750
+  },
+  {
+    "id": 3,
+    "type": "ambulance",
+    "name": "Rapid Ambulance",
+    "lat": 13.0800,
+    "lng": 80.2600
+  },
+  {
+    "id": 4,
+    "type": "tow",
+    "name": "Tow Rescue",
+    "lat": 13.0900,
+    "lng": 80.2500
+  }
+]
