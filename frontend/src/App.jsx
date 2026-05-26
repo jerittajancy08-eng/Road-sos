@@ -1,114 +1,213 @@
-import React, { useState, useEffect } from "react";
-import { socket } from "./hooks/useSocket";
-import Login from "./login";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { useAuth } from "./hooks/useAuth.jsx";
+import SignInScreen from "./screens/SignInScreen";
+import RegisterScreen from "./screens/RegisterScreen";
+import HomeScreen from "./screens/HomeScreen";
+import LiveTrackingScreen from "./screens/LiveTrackingScreen";
+import ProfileScreen from "./screens/ProfileScreen";
+import ProtectionScreen from "./screens/ProtectionScreen";
+import ActivityScreen from "./screens/ActivityScreen";
+import IncidentsScreen from "./screens/IncidentsScreen";
+import ResponderMapScreen from "./screens/ResponderMapScreen";
 import HelperDashboard from "./components/HelperDashboard";
 import HospitalDashboard from "./components/HospitalDashboard";
 import PoliceDashboard from "./components/PoliceDashboard";
-import UserDashboard from "./components/UserDashboard";
-import SplashScreen from "./components/SplashScreen";
+import AdminLayout from "./admin/AdminLayout";
+import AdminDashboardScreen from "./screens/AdminDashboard";
+import ResponderApprovals from "./admin/ResponderApprovals";
+import LiveIncidents from "./admin/LiveIncidents";
+import DispatchCenter from "./admin/DispatchCenter";
+import UsersManagement from "./admin/UsersManagement";
+import Analytics from "./admin/Analytics";
+import SystemStatus from "./admin/SystemStatus";
+import LoadingRoadSOS from "./components/LoadingRoadSOS";
+import AppErrorBoundary from "./components/AppErrorBoundary";
+import { FireLayout, HelperLayout, HospitalLayout, PoliceLayout, UserLayout } from "./components/DashboardLayout";
+import { normalizeRole } from "./utils/roleUtils";
 import "./index.css";
 
+function rolePath(role) {
+  switch (normalizeRole(role)) {
+    case "helper":
+      return "/helper/home";
+    case "police":
+      return "/police/home";
+    case "hospital":
+      return "/hospital/home";
+    case "fire":
+      return "/fire/home";
+    case "admin":
+      return "/admin";
+    default:
+      return "/user/home";
+  }
+}
+
+function effectiveDashboardRole(profile) {
+  if (!profile) return "user";
+  return normalizeRole(profile.role || profile.requestedRole || "user");
+}
+
+function PrivateRoute({ children }) {
+  const { user, authLoading } = useAuth();
+  if (authLoading) return <LoadingRoadSOS />;
+  if (!user) return <Navigate to="/signin" replace />;
+  return children;
+}
+
+function AdminRoute({ children }) {
+  const { user, authLoading } = useAuth();
+  if (authLoading) return <LoadingRoadSOS />;
+  if (!user) return <Navigate to="/signin" replace />;
+  if ((user?.role || "user") !== "admin") return <Navigate to={rolePath(effectiveDashboardRole(user))} replace />;
+  return children;
+}
+
 function App() {
-  const [user, setUser] = useState(() => {
-    try {
-      const stored = localStorage.getItem("user");
-      return stored ? JSON.parse(stored) : null;
-    } catch (e) {
-      return null;
+  const { user, authLoading, login, register, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogin = async (credentials) => {
+    const profile = await login(credentials);
+    if (profile) {
+      navigate(rolePath(effectiveDashboardRole(profile)), { replace: true });
     }
-  });
-
-  const [requests, setRequests] = useState([]);
-  const [isSplashActive, setIsSplashActive] = useState(true);
-
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem("user", JSON.stringify(user));
-    } else {
-      localStorage.removeItem("user");
-    }
-  }, [user]);
-
-  useEffect(() => {
-    fetch("http://localhost:5000/sos")
-      .then(res => res.json())
-      .then(setRequests)
-      .catch(err => console.error("Error fetching SOS:", err));
-
-    socket.on("newSOS", (data) => {
-      setRequests((prev) => {
-         if (prev.find(r => r.id === data.id)) return prev;
-         return [data, ...prev];
-      });
-    });
-
-    socket.on("statusUpdated", (data) => {
-      setRequests((prev) => 
-        prev.map(r => r.id === data.sosId ? { ...r, status: data.status } : r)
-      );
-    });
-
-    socket.on("helperUpdate", (data) => {
-      setRequests((prev) =>
-        prev.map((r) => (r.id === data.sosId ? { ...r, helpers: data.helpers } : r))
-      );
-    });
-
-    return () => {
-      socket.off("newSOS");
-      socket.off("statusUpdated");
-      socket.off("helperUpdate");
-    };
-  }, []);
-
-  const handleLogout = () => {
-    setUser(null);
   };
 
-  if (isSplashActive) {
-    return <SplashScreen onComplete={() => setIsSplashActive(false)} />;
-  }
-
-  if (!user) {
-    return <Login onLogin={setUser} />;
-  }
+  const handleRegister = async (formData) => {
+    const profile = await register(formData);
+    if (profile) {
+      navigate(rolePath(effectiveDashboardRole(profile)), { replace: true });
+    }
+  };
 
   return (
-    <div className="bg-slate-950 min-h-screen text-slate-100 selection:bg-red-500/30">
-      <main className="pb-24">
-        {user.role === "helper" && <HelperDashboard requests={requests} />}
-        {user.role === "hospital" && <HospitalDashboard requests={requests} />}
-        {user.role === "police" && <PoliceDashboard requests={requests} />}
-        {user.role === "user" && <UserDashboard user={user} />}
-      </main>
-      
-      {/* Global Status Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-2xl border-t border-white/5 px-6 py-4 flex justify-between items-center z-[4000] shadow-[0_-20px_50px_rgba(0,0,0,0.5)]">
-        <div className="flex items-center gap-6">
-           <div className="flex items-center gap-2">
-             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Network Connected</span>
-           </div>
-           <div className="hidden sm:flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-600">
-             <span>Protocol: RoadSOS v2.4</span>
-             <span>Region: Sector 7-G</span>
-           </div>
-        </div>
-        
-        <div className="flex items-center gap-6">
-           <div className="text-right mr-4 hidden md:block">
-              <div className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Active Session</div>
-              <div className="text-[10px] font-black text-white italic tracking-tight">{user.name} ({user.role.toUpperCase()})</div>
-           </div>
-           <button 
-            onClick={handleLogout}
-            className="bg-white/5 hover:bg-red-600/10 border border-white/10 hover:border-red-500/50 text-slate-400 hover:text-red-500 px-5 py-2.5 rounded-xl text-[10px] font-black tracking-widest transition-all active:scale-95"
-          >
-            TERMINATE
-          </button>
-        </div>
-      </div>
-    </div>
+    <AppErrorBoundary>
+    <Routes>
+      <Route
+        path="/"
+        element={
+          authLoading ? (
+            <LoadingRoadSOS />
+          ) : user ? (
+            <Navigate to={rolePath(effectiveDashboardRole(user))} replace />
+          ) : (
+            <Navigate to="/signin" replace />
+          )
+        }
+      />
+
+      <Route
+        path="/signin"
+        element={
+          authLoading ? (
+            <LoadingRoadSOS />
+          ) : user ? (
+            <Navigate to={rolePath(effectiveDashboardRole(user))} replace />
+          ) : (
+            <SignInScreen onSignIn={handleLogin} onRegisterSwitch={() => navigate("/register")} />
+          )
+        }
+      />
+
+      <Route
+        path="/register"
+        element={
+          authLoading ? (
+            <LoadingRoadSOS />
+          ) : user ? (
+            <Navigate to={rolePath(effectiveDashboardRole(user))} replace />
+          ) : (
+            <RegisterScreen onRegister={handleRegister} onBackToSignIn={() => navigate("/signin")} />
+          )
+        }
+      />
+
+      <Route element={<PrivateRoute><UserLayout /></PrivateRoute>}>
+        <Route path="/user/home" element={<HomeScreen />} />
+        <Route path="/user/protection" element={<ProtectionScreen />} />
+        <Route path="/user/activity" element={<ActivityScreen />} />
+        <Route path="/user/profile" element={<ProfileScreen />} />
+        <Route path="/user/tracking" element={<LiveTrackingScreen />} />
+        <Route path="/home" element={<Navigate to="/user/home" replace />} />
+        <Route path="/profile" element={<Navigate to="/user/profile" replace />} />
+        <Route path="/activity" element={<Navigate to="/user/activity" replace />} />
+        <Route path="/tracking" element={<Navigate to="/user/tracking" replace />} />
+        <Route path="/protection" element={<Navigate to="/user/protection" replace />} />
+      </Route>
+
+      <Route element={<PrivateRoute><HelperLayout /></PrivateRoute>}>
+        <Route path="/helper/home" element={<HomeScreen />} />
+        <Route path="/helper/dispatch" element={<HelperDashboard />} />
+        <Route path="/helper/map" element={<ResponderMapScreen />} />
+        <Route path="/helper/incidents" element={<IncidentsScreen />} />
+        <Route path="/helper/profile" element={<ProfileScreen />} />
+        <Route path="/helper" element={<Navigate to="/helper/home" replace />} />
+      </Route>
+
+      <Route element={<PrivateRoute><PoliceLayout /></PrivateRoute>}>
+        <Route path="/police/home" element={<HomeScreen />} />
+        <Route path="/police/dispatch" element={<PoliceDashboard />} />
+        <Route path="/police/map" element={<ResponderMapScreen />} />
+        <Route path="/police/incidents" element={<IncidentsScreen />} />
+        <Route path="/police/profile" element={<ProfileScreen />} />
+        <Route path="/police" element={<Navigate to="/police/home" replace />} />
+      </Route>
+
+      <Route element={<PrivateRoute><HospitalLayout /></PrivateRoute>}>
+        <Route path="/hospital/home" element={<HomeScreen />} />
+        <Route path="/hospital/dispatch" element={<HospitalDashboard />} />
+        <Route path="/hospital/map" element={<ResponderMapScreen />} />
+        <Route path="/hospital/incidents" element={<IncidentsScreen />} />
+        <Route path="/hospital/profile" element={<ProfileScreen />} />
+        <Route path="/hospital" element={<Navigate to="/hospital/home" replace />} />
+      </Route>
+
+      <Route element={<PrivateRoute><FireLayout /></PrivateRoute>}>
+        <Route path="/fire/home" element={<HomeScreen />} />
+        <Route path="/fire/dispatch" element={<HelperDashboard />} />
+        <Route path="/fire/map" element={<ResponderMapScreen />} />
+        <Route path="/fire/incidents" element={<IncidentsScreen />} />
+        <Route path="/fire/profile" element={<ProfileScreen />} />
+        <Route path="/fire" element={<Navigate to="/fire/home" replace />} />
+      </Route>
+
+      <Route
+        path="/map"
+        element={
+          <PrivateRoute>
+            <Navigate
+              to={effectiveDashboardRole(user) === "user" ? "/user/home" : `/${effectiveDashboardRole(user)}/map`}
+              replace
+            />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/incidents"
+        element={<PrivateRoute><Navigate to={effectiveDashboardRole(user) === "user" ? "/user/activity" : `/${effectiveDashboardRole(user)}/incidents`} replace /></PrivateRoute>}
+      />
+
+      <Route
+        path="/admin/*"
+        element={
+          <AdminRoute>
+            <AdminLayout onLogout={logout} />
+          </AdminRoute>
+        }
+      >
+        <Route index element={<AdminDashboardScreen />} />
+        <Route path="approvals" element={<ResponderApprovals />} />
+        <Route path="incidents" element={<LiveIncidents />} />
+        <Route path="dispatch" element={<DispatchCenter />} />
+        <Route path="users" element={<UsersManagement />} />
+        <Route path="analytics" element={<Analytics />} />
+        <Route path="system" element={<SystemStatus />} />
+      </Route>
+
+      <Route path="*" element={authLoading ? <LoadingRoadSOS /> : user ? <Navigate to={rolePath(effectiveDashboardRole(user))} replace /> : <Navigate to="/signin" replace />} />
+    </Routes>
+    </AppErrorBoundary>
   );
 }
 

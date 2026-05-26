@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import { socket } from "../hooks/useSocket";
-import { motion, AnimatePresence } from "framer-motion";
+import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import { AnimatePresence, motion } from "framer-motion";
 import L from "leaflet";
+import { useEmergencyContext } from "../hooks/EmergencyContext";
+import VerificationPendingCard from "./VerificationPendingCard";
+import { dispatchTitles } from "../utils/roleUtils";
+import LoadingMap from "./LoadingMap";
+import { safePosition, isValidPosition } from "../utils/coordinateUtils";
 
 const accidentIcon = new L.Icon({
   iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
@@ -13,215 +16,108 @@ const accidentIcon = new L.Icon({
   shadowSize: [41, 41],
 });
 
-export default function HelperDashboard({ requests: initialRequests }) {
-  const [requests, setRequests] = useState(initialRequests || []);
-  const [acceptedRequests, setAcceptedRequests] = useState(new Set());
+export default function HelperDashboard() {
+  const { dispatchQueue, acceptIncident, rejectIncident, completeIncident, currentUserRole, responderApproved, isOnline, gpsError } = useEmergencyContext();
+  const requests = dispatchQueue;
+  const mapRequests = requests.filter((req) => isValidPosition(req?.pos));
+  const mapCenter = safePosition(mapRequests[0]?.pos);
 
-  useEffect(() => {
-    socket.on("newSOS", (data) => {
-      setRequests((prev) => {
-        if (prev.find(r => r.id === data.id)) return prev;
-        return [data, ...prev];
-      });
-    });
-
-    socket.on("helperUpdate", (data) => {
-      setRequests((prev) =>
-        prev.map((r) => (r.id === data.sosId ? { ...r, helpers: data.helpers } : r))
-      );
-    });
-
-    return () => {
-      socket.off("newSOS");
-      socket.off("helperUpdate");
-    };
-  }, []);
-
-  const handleAccept = (sosId) => {
-    const helper = {
-      helperId: "helper_" + Math.floor(Math.random() * 1000),
-      name: "Nearby Responder",
-      contact: "+91 98765 43210",
-    };
-    socket.emit("helperAccepted", { sosId, helper });
-    setAcceptedRequests((prev) => new Set(prev).add(sosId));
-  };
-
-  const calculateDistance = (lat, lng) => {
-    return (Math.random() * 5 + 0.5).toFixed(1);
+  const calculateDistance = (req) => {
+    if (!req?.lat || !req?.lng) return "--";
+    return "Nearby";
   };
 
   return (
-    <div className="bg-slate-950 min-h-screen text-white p-4 md:p-8 font-sans">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-6">
-          <div>
-            <h1 className="text-3xl font-black text-red-500 flex items-center gap-3 italic">
-              <span className="relative flex h-4 w-4">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]"></span>
-              </span>
-              HELPER COMMAND
-            </h1>
-            <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mt-1">Community Rescue Network</p>
-          </div>
-          <div className="bg-slate-900/50 backdrop-blur-md border border-white/5 px-6 py-3 rounded-2xl flex items-center gap-4 shadow-xl">
-            <span className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Active Status:</span> 
-            <span className="text-emerald-400 text-xs font-black uppercase tracking-tight flex items-center gap-2">
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-              Ready to Respond
-            </span>
-          </div>
-        </header>
+    <div className="min-h-full px-4 pt-4">
+      <header className="road-card mb-3 flex items-center justify-between px-4 py-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Dispatch</p>
+          <h1 className="mt-1 text-lg font-bold text-white">{dispatchTitles[currentUserRole] || "Helper Dispatch"}</h1>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <span className={`flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${responderApproved ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-300" : "border-yellow-300/20 bg-yellow-400/10 text-yellow-300"}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_10px_currentColor]" />
+            {responderApproved ? "Live" : "Verification Pending"}
+          </span>
+          <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-cyan-300">
+            {gpsError ? "Offline" : "GPS Active"}
+          </span>
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-slate-300">
+            {isOnline ? "Connected" : "Offline"}
+          </span>
+        </div>
+      </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          {/* Map Section */}
-          <div className="lg:col-span-7 xl:col-span-8">
-            <div className="glass-card h-[450px] overflow-hidden shadow-2xl relative mb-8">
-              <MapContainer center={[13.0827, 80.2707]} zoom={13} style={{ height: "100%", width: "100%" }} zoomControl={false}>
-                <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
-                {requests.map((req) => (
-                  <Marker key={req.id} position={[req.lat, req.lng]} icon={accidentIcon}>
-                    <Popup className="custom-popup">
-                      <div className="p-2 min-w-[120px]">
-                        <p className="text-[10px] font-black text-red-500 uppercase mb-1">Incident Report</p>
-                        <p className="text-xs font-bold mb-3">Severity: {req.severity.toUpperCase()}</p>
-                        <button 
-                          onClick={() => handleAccept(req.id)}
-                          className="w-full bg-red-600 text-white text-[10px] font-black py-2 rounded-lg uppercase tracking-widest transition-all hover:bg-red-500"
-                        >
-                          Respond
-                        </button>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
-              </MapContainer>
-              <div className="absolute top-6 left-6 z-[1000] bg-slate-950/80 backdrop-blur-xl px-4 py-2 rounded-xl border border-white/10 flex items-center gap-3 shadow-2xl">
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-                <span className="text-[10px] font-black tracking-widest text-slate-300">SCANNING 5KM RADIUS</span>
-              </div>
-            </div>
+      {!responderApproved && <VerificationPendingCard />}
 
-            {/* Notification/Stats Area */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {[
-                { label: "Golden Hour", val: "Critical", icon: "⏱️", color: "text-red-500" },
-                { label: "Community", val: "1.2k Active", icon: "👥", color: "text-blue-500" },
-                { label: "Avg Response", val: "4.2 Min", icon: "⚡", color: "text-emerald-500" }
-              ].map((s, i) => (
-                <div key={i} className="glass-card p-6 flex flex-col items-center text-center">
-                  <div className="text-2xl mb-2">{s.icon}</div>
-                  <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{s.label}</div>
-                  <div className={`text-lg font-black ${s.color} italic tracking-tight`}>{s.val}</div>
+      {responderApproved && (
+        <>
+
+      <div className="road-card relative mb-3 h-[235px] overflow-hidden">
+        {!isValidPosition(mapCenter) ? <LoadingMap message={gpsError || "Getting your location..."} /> : <MapContainer center={mapCenter} zoom={13} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+          <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png" />
+          {mapRequests.map((req) => (
+            <Marker key={req.id} position={req.pos} icon={accidentIcon}>
+              <Popup className="custom-popup">
+                <div className="p-2 min-w-[120px]">
+                  <p className="mb-1 text-[10px] font-black uppercase text-red-500">Incident</p>
+                  <p className="mb-3 text-xs font-bold">Severity: {req.severity}</p>
+                  <button onClick={() => acceptIncident(req.id)} className="w-full rounded-lg bg-red-600 py-2 text-[10px] font-black uppercase tracking-widest text-white">Respond</button>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Alert Feed */}
-          <div className="lg:col-span-5 xl:col-span-4 space-y-6">
-            <div className="flex items-center justify-between mb-2 px-2">
-              <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-400">Live Alert Feed</h2>
-              <span className="bg-red-500/10 text-red-500 text-[10px] font-black px-2.5 py-1 rounded-full border border-red-500/20">
-                {requests.filter(r => r.status === 'pending').length} New
-              </span>
-            </div>
-
-            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-              <AnimatePresence mode="popLayout">
-                {requests.length === 0 ? (
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="glass-card p-12 text-center border-dashed border-white/5"
-                  >
-                    <div className="text-4xl mb-4 opacity-20">📡</div>
-                    <p className="text-slate-500 text-xs font-black uppercase tracking-widest">Waiting for signals...</p>
-                  </motion.div>
-                ) : (
-                  requests.map((req) => (
-                    <motion.div
-                      key={req.id}
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      layout
-                      className={`glass-card p-6 transition-all group ${
-                        acceptedRequests.has(req.id) 
-                          ? 'border-emerald-500/50 bg-emerald-500/5' 
-                          : 'hover:border-red-500/50'
-                      }`}
-                    >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-3 h-3 rounded-full ${
-                            req.severity === 'high' ? 'bg-red-500 animate-pulse' : 
-                            req.severity === 'medium' ? 'bg-orange-500' : 'bg-blue-500'
-                          }`} />
-                          <div>
-                            <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-0.5">Alert #{req.id.toString().slice(-4)}</div>
-                            <div className="text-sm font-black tracking-tight">Accident Detected</div>
-                          </div>
-                        </div>
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-tighter ${
-                          req.severity === 'high' ? 'bg-red-500 text-white' : 
-                          req.severity === 'medium' ? 'bg-orange-500 text-white' : 'bg-blue-500 text-white'
-                        }`}>
-                          {req.severity}
-                        </span>
-                      </div>
-
-                      <div className="space-y-2 mb-6">
-                        <div className="flex justify-between text-[10px] font-bold">
-                          <span className="text-slate-500 uppercase">Distance</span>
-                          <span className="text-white">{calculateDistance(req.lat, req.lng)} KM</span>
-                        </div>
-                        <div className="flex justify-between text-[10px] font-bold">
-                          <span className="text-slate-500 uppercase">Estimated ETA</span>
-                          <span className="text-red-400 font-black">~{Math.ceil(calculateDistance(req.lat, req.lng) * 2)} MIN</span>
-                        </div>
-                      </div>
-
-                      {!acceptedRequests.has(req.id) ? (
-                        <button
-                          onClick={() => handleAccept(req.id)}
-                          className="w-full bg-slate-800 hover:bg-red-600 text-white text-[10px] font-black py-3.5 rounded-xl transition-all uppercase tracking-widest shadow-lg active:scale-[0.98]"
-                        >
-                          Accept & Navigate
-                        </button>
-                      ) : (
-                        <div className="flex items-center justify-center gap-3 py-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-[10px] font-black uppercase tracking-widest">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
-                          </svg>
-                          Mission Active
-                        </div>
-                      )}
-
-                      {req.helpers && req.helpers.length > 0 && (
-                        <div className="mt-5 pt-5 border-t border-white/5 flex items-center justify-between">
-                          <div className="flex -space-x-3">
-                            {req.helpers.slice(0, 4).map((h, i) => (
-                              <div key={i} className="w-8 h-8 rounded-full bg-slate-800 border-2 border-slate-900 flex items-center justify-center text-[8px] font-black text-blue-400 uppercase">
-                                {h.name[0]}
-                              </div>
-                            ))}
-                          </div>
-                          <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">
-                            {req.helpers.length} Team Members
-                          </span>
-                        </div>
-                      )}
-                    </motion.div>
-                  ))
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>}
+        <div className="absolute left-4 top-4 z-[1000] flex items-center gap-2 rounded-full border border-white/10 bg-slate-950/80 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300 backdrop-blur-xl">
+          <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+          Live requests
         </div>
       </div>
+
+      <section className="road-card px-4 py-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-400">Active requests</h2>
+          <span className="rounded-full border border-red-400/20 bg-red-500/10 px-2.5 py-1 text-[10px] font-black text-red-300">{requests.length} Open</span>
+        </div>
+
+        <div className="space-y-3">
+          <AnimatePresence mode="popLayout">
+            {requests.length === 0 ? (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-3xl border border-dashed border-white/10 bg-white/[0.03] px-4 py-8 text-center">
+                <p className="text-sm font-bold text-white">No active requests</p>
+                <p className="mt-2 text-xs text-slate-500">Waiting for nearby incidents.</p>
+                <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-300">Dispatch system active</p>
+              </motion.div>
+            ) : (
+              requests.map((req) => (
+                <motion.div key={req.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} layout className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+                  <div className="mb-4 flex items-start justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Request #{req.id.slice(0, 6)}</p>
+                      <p className="text-sm font-black tracking-tight text-white">{req.type || "Emergency detected"}</p>
+                      <p className="mt-1 text-[10px] text-slate-400">From {req.reporter?.name || "RoadSOS user"}</p>
+                    </div>
+                    <span className="rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-black uppercase text-white">{req.severity}</span>
+                  </div>
+
+                  <div className="mb-4 space-y-2">
+                    <div className="flex justify-between text-[10px] font-bold"><span className="uppercase text-slate-500">Location</span><span className="text-white">{calculateDistance(req)}</span></div>
+                    <div className="flex justify-between text-[10px] font-bold"><span className="uppercase text-slate-500">Status</span><span className="font-black uppercase text-cyan-300">{req.status}</span></div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <button onClick={() => acceptIncident(req.id)} className="rounded-2xl bg-cyan-600 py-3 text-[10px] font-black uppercase tracking-widest text-white">Accept</button>
+                    <button onClick={() => rejectIncident(req.id)} className="rounded-2xl border border-white/10 bg-white/[0.03] py-3 text-[10px] font-black uppercase tracking-widest text-slate-300">Reject</button>
+                    <button onClick={() => completeIncident(req.id)} className="rounded-2xl bg-emerald-600 py-3 text-[10px] font-black uppercase tracking-widest text-white">Done</button>
+                  </div>
+                </motion.div>
+              ))
+            )}
+          </AnimatePresence>
+        </div>
+      </section>
+      </>
+      )}
     </div>
   );
 }
