@@ -22,6 +22,17 @@ const roleColor = {
   helper: "#34d399",
 };
 
+const serviceColor = {
+  hospital: "#fb7185",
+  police: "#60a5fa",
+  ambulance: "#ef4444",
+  fire: "#f97316",
+  mechanic: "#facc15",
+  puncture: "#fde047",
+  fuel: "#34d399",
+  service: "#a78bfa",
+};
+
 function responderPosition(responder) {
   return getPosition(responder) || responder.pos || null;
 }
@@ -33,6 +44,7 @@ export default function UserMapPage() {
     eta,
     gpsError,
     incidents = [],
+    nearbyServices = [],
     responders = [],
     userPos,
   } = useEmergencyContext();
@@ -87,6 +99,21 @@ export default function UserMapPage() {
                 <div className="space-y-1 p-1 text-xs">
                   <p className="font-bold text-white">{responder.name || responder.fullName || "Responder"}</p>
                   <p className="capitalize text-slate-300">{responder.role || "unit"} · {responder.status || "available"}</p>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+          {nearbyServices.map((service) => (
+            <Marker key={service.id} position={service.pos || [service.lat, service.lng]} icon={markerIcon(serviceColor[service.type] || serviceColor.service, 13)}>
+              <Popup className="custom-popup">
+                <div className="space-y-2 p-1 text-xs">
+                  <p className="font-bold text-white">{service.name}</p>
+                  <p className="capitalize text-slate-300">{service.type} · {service.distanceKm ? `${service.distanceKm.toFixed(1)} km` : "nearby"}</p>
+                  <div className="flex gap-2">
+                    {service.phone && <a className="rounded-lg bg-emerald-600 px-2 py-1 text-white" href={`tel:${service.phone}`}>Call</a>}
+                    <a className="rounded-lg bg-cyan-600 px-2 py-1 text-white" href={`https://maps.google.com/?q=${service.lat},${service.lng}`} target="_blank" rel="noreferrer">Directions</a>
+                  </div>
                 </div>
               </Popup>
             </Marker>

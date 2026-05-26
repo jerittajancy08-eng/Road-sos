@@ -19,7 +19,7 @@ export default function UsersManagement() {
       const text = `${user.fullName || user.name || ""} ${user.email || ""}`.toLowerCase();
       const matchesSearch = text.includes(search.toLowerCase());
       const matchesRole = role === "all" || user.role === role;
-      const matchesStatus = status === "all" || user.verificationStatus === status;
+      const matchesStatus = status === "all" || String(user.verificationStatus || "").toUpperCase() === status;
       return matchesSearch && matchesRole && matchesStatus;
     });
   }, [role, search, status, users]);
@@ -28,8 +28,8 @@ export default function UsersManagement() {
     await setDoc(doc(db, "users", user.uid || user.id), { disabled: true, accountStatus: "disabled", updatedAt: serverTimestamp() }, { merge: true });
   };
   const reactivateAccount = async (user) => setDoc(doc(db, "users", user.uid || user.id), { disabled: false, accountStatus: "active", updatedAt: serverTimestamp() }, { merge: true });
-  const suspendResponder = async (user) => setDoc(doc(db, "users", user.uid || user.id), { verificationStatus: "suspended", verified: false, accountStatus: "suspended", updatedAt: serverTimestamp() }, { merge: true });
-  const resetVerification = async (user) => setDoc(doc(db, "users", user.uid || user.id), { verificationStatus: "pending", verified: false, updatedAt: serverTimestamp() }, { merge: true });
+  const suspendResponder = async (user) => setDoc(doc(db, "users", user.uid || user.id), { verificationStatus: "SUSPENDED", accountStatus: "suspended", updatedAt: serverTimestamp() }, { merge: true });
+  const resetVerification = async (user) => setDoc(doc(db, "users", user.uid || user.id), { verificationStatus: "PENDING", updatedAt: serverTimestamp() }, { merge: true });
   const forceLogout = async (user) => setDoc(doc(db, "users", user.uid || user.id), { forceLogoutAt: serverTimestamp(), updatedAt: serverTimestamp() }, { merge: true });
 
   return (
@@ -52,9 +52,9 @@ export default function UsersManagement() {
           </select>
           <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-2xl bg-slate-900/80 px-4 py-3 text-sm text-white outline-none ring-1 ring-white/10">
             <option value="all">All approval states</option>
-            <option value="approved">Approved</option>
-            <option value="pending">Pending</option>
-            <option value="rejected">Rejected</option>
+            <option value="APPROVED">Approved</option>
+            <option value="PENDING">Pending</option>
+            <option value="REJECTED">Rejected</option>
           </select>
         </div>
       </AdminCard>
@@ -74,7 +74,7 @@ export default function UsersManagement() {
               <AdminStatusBadge value={user.role || "user"} />
               <div className="flex flex-wrap gap-2">
                 <AdminStatusBadge value={user.disabled ? "disabled" : user.accountStatus || "active"} />
-                <AdminStatusBadge value={user.verificationStatus || (user.role === "user" ? "approved" : "pending")} />
+                <AdminStatusBadge value={user.verificationStatus || (user.role === "user" ? "APPROVED" : "PENDING")} />
               </div>
               <p className="font-mono text-sm text-white">{incidents.filter((incident) => incident.userId === (user.uid || user.id) || incident.createdBy === (user.uid || user.id) || incident.reporterId === (user.uid || user.id)).length}</p>
               <p className="text-xs text-slate-400">{formatTimestamp(user.lastActivityAt || user.updatedAt || user.createdAt)}</p>
@@ -98,7 +98,7 @@ export default function UsersManagement() {
             <AdminCard title="Account Status">
               <div className="grid gap-3 md:grid-cols-2">
                 <p className="text-sm text-slate-300">Role: <span className="font-bold text-white">{selectedUser.role || "user"}</span></p>
-                <p className="text-sm text-slate-300">Verification: <span className="font-bold text-white">{selectedUser.verificationStatus || "approved"}</span></p>
+                <p className="text-sm text-slate-300">Verification: <span className="font-bold text-white">{selectedUser.verificationStatus || "APPROVED"}</span></p>
                 <p className="text-sm text-slate-300">Created: <span className="font-bold text-white">{formatTimestamp(selectedUser.createdAt)}</span></p>
                 <p className="text-sm text-slate-300">Last activity: <span className="font-bold text-white">{formatTimestamp(selectedUser.lastActivityAt || selectedUser.updatedAt)}</span></p>
               </div>

@@ -50,7 +50,7 @@ export default function ProfileScreen() {
     email: user.email || "",
     role,
     requestedRole: user.requestedRole || user.role || "user",
-    verificationStatus: user.verificationStatus || (user.verified ? "approved" : "pending"),
+    verificationStatus: user.verificationStatus || (role === "user" ? "APPROVED" : "PENDING"),
     badgeId: user.badgeId || "",
     stationName: user.stationName || "",
     hospitalName: user.hospitalName || "",

@@ -37,6 +37,12 @@ export function isResponderRole(role) {
   return responderRoles.includes(normalizeRole(role));
 }
 
+export function normalizeVerificationStatus(status) {
+  const value = String(status || "PENDING").trim().toUpperCase();
+  if (["APPROVED", "REJECTED", "SUSPENDED", "PENDING"].includes(value)) return value;
+  return value === "VERIFIED" ? "APPROVED" : "PENDING";
+}
+
 export function getRoleHomePath(role = "user") {
   const safeRole = normalizeRole(role);
   return `${roleBasePath[safeRole] || roleBasePath.user}/home`;
@@ -49,7 +55,7 @@ export function getRoleBasePath(role = "user") {
 
 export function isResponderApproved(profile) {
   if (!isResponderRole(profile?.role)) return true;
-  return profile?.verificationStatus === "approved" || profile?.verified === true;
+  return normalizeVerificationStatus(profile?.verificationStatus) === "APPROVED";
 }
 
 export function displayRole(role = "user") {

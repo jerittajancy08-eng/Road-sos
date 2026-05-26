@@ -1,14 +1,19 @@
 export const INCIDENT_STATES = {
   DETECTED: "DETECTED",
+  BROADCASTING: "BROADCASTING",
   PENDING_RESPONSE: "PENDING_RESPONSE",
   RESPONDER_ASSIGNED: "RESPONDER_ASSIGNED",
+  ACCEPTED: "ACCEPTED",
   EN_ROUTE: "EN_ROUTE",
+  ARRIVED: "ARRIVED",
   ACTIVE_RESCUE: "ACTIVE_RESCUE",
+  TRANSPORTING: "TRANSPORTING",
   RESOLVED: "RESOLVED",
+  ARCHIVED: "ARCHIVED",
   CLOSED: "CLOSED",
 };
 
-export const terminalIncidentStates = [INCIDENT_STATES.RESOLVED, INCIDENT_STATES.CLOSED];
+export const terminalIncidentStates = [INCIDENT_STATES.RESOLVED, INCIDENT_STATES.ARCHIVED, INCIDENT_STATES.CLOSED];
 
 export const RESPONDER_STATES = {
   OFFLINE: "OFFLINE",
@@ -23,15 +28,19 @@ export const responderRoles = ["helper", "police", "hospital", "fire"];
 
 const statusAliases = {
   detected: INCIDENT_STATES.DETECTED,
+  broadcasting: INCIDENT_STATES.BROADCASTING,
   active: INCIDENT_STATES.PENDING_RESPONSE,
   assigned: INCIDENT_STATES.RESPONDER_ASSIGNED,
-  accepted: INCIDENT_STATES.RESPONDER_ASSIGNED,
+  accepted: INCIDENT_STATES.ACCEPTED,
   enroute: INCIDENT_STATES.EN_ROUTE,
   "en-route": INCIDENT_STATES.EN_ROUTE,
-  arrived: INCIDENT_STATES.ACTIVE_RESCUE,
+  arrived: INCIDENT_STATES.ARRIVED,
   rescue: INCIDENT_STATES.ACTIVE_RESCUE,
+  active_rescue: INCIDENT_STATES.ACTIVE_RESCUE,
+  transporting: INCIDENT_STATES.TRANSPORTING,
   completed: INCIDENT_STATES.RESOLVED,
   resolved: INCIDENT_STATES.RESOLVED,
+  archived: INCIDENT_STATES.ARCHIVED,
   closed: INCIDENT_STATES.CLOSED,
 };
 
@@ -113,7 +122,7 @@ export function normalizeResponderState(responder = {}) {
 }
 
 export function isDispatchReadyResponder(responder) {
-  const approval = responder?.verificationStatus === "approved" || responder?.verified === true;
+  const approval = String(responder?.verificationStatus || "").toUpperCase() === "APPROVED";
   const state = normalizeResponderState(responder);
   const online = responder?.online === true || [RESPONDER_STATES.ONLINE, RESPONDER_STATES.AVAILABLE].includes(state);
   const available = responder?.available === true || state === RESPONDER_STATES.AVAILABLE || String(responder?.availability || "").toLowerCase() === "available";

@@ -28,7 +28,7 @@ export default function AdminDashboard() {
   const { items: activityLogs } = useAdminCollection("activityLogs", { orderBy: "createdAt" });
   const responders = users.filter((user) => isResponderRole(user.role));
   const onlineResponders = responders.filter((user) => user.availability !== false && !["offline", "suspended"].includes(String(user.availability || user.status || "").toLowerCase()));
-  const pending = responders.filter((user) => String(user.verificationStatus || "").toLowerCase() === "pending");
+  const pending = responders.filter((user) => String(user.verificationStatus || "").toUpperCase() === "PENDING");
   const activeIncidents = incidents.filter(isActiveIncident);
   const critical = activeIncidents.filter((incident) => ["critical", "high"].includes(String(incident.severity || "").toLowerCase()));
   const previousActiveCount = useRef(activeIncidents.length);

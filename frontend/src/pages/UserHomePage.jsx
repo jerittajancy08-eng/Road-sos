@@ -75,9 +75,11 @@ export default function UserHomePage() {
     activeEmergency,
     activeIncident,
     emergencyStatus,
+    emergencyLiteMode,
     eta,
     gpsError,
     isOnline,
+    nearbyServices = [],
     protectionEnabled,
     responders = [],
     toggleProtection,
@@ -92,6 +94,7 @@ export default function UserHomePage() {
     return activeIncident?.assignedResponderId === responderId || activeIncident?.responders?.some((item) => item.uid === responderId || item.id === responderId);
   });
   const lifecycle = normalizeIncidentState(activeIncident?.status || activeIncident?.lifecycleStage);
+  const nearestCare = nearbyServices.find((service) => ["hospital", "ambulance", "police", "fire"].includes(service.type)) || nearbyServices[0];
 
   const handleSOS = async () => {
     if (sosSending) return;
@@ -127,6 +130,13 @@ export default function UserHomePage() {
         </button>
       </section>
 
+      {emergencyLiteMode && (
+        <section className="road-card mt-3 border-amber-300/20 bg-amber-400/10 px-4 py-3">
+          <p className="text-xs font-bold text-amber-200">Low-network emergency mode is ready.</p>
+          <p className="mt-1 text-[11px] text-slate-300">RoadSOS will queue SOS requests, use cached GPS, and open SMS fallback for saved contacts.</p>
+        </section>
+      )}
+
       {activeEmergency && (
         <section className="road-card mt-3 border-red-400/20 bg-red-950/15 px-4 py-4">
           <div className="mb-4">
@@ -158,6 +168,13 @@ export default function UserHomePage() {
               {gpsError ? "GPS signal is limited. RoadSOS will keep retrying location updates." : "Your live location is active and responders will receive updates automatically."}
             </p>
           </div>
+          {nearestCare && (
+            <div className="mt-3 rounded-2xl bg-white/[0.04] px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Nearest support</p>
+              <p className="mt-1 text-sm font-bold text-white">{nearestCare.name}</p>
+              <p className="mt-0.5 text-xs capitalize text-slate-400">{nearestCare.type} {nearestCare.distanceKm ? `· ${nearestCare.distanceKm.toFixed(1)} km` : ""}</p>
+            </div>
+          )}
         </section>
       )}
 

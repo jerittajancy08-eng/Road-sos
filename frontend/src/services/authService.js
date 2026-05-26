@@ -182,7 +182,7 @@ export async function registerUser(formData) {
       email: user.email || authEmail,
       phone: formData.phone,
       role: selectedRole,
-      verificationStatus: selectedRole === "user" ? "approved" : "pending",
+      verificationStatus: selectedRole === "user" ? "APPROVED" : "PENDING",
       verificationDetails:
         selectedRole !== "user"
           ? {
@@ -194,7 +194,6 @@ export async function registerUser(formData) {
       createdAt: now,
       name: fullName,
       requestedRole: selectedRole,
-      verified: selectedRole === "user",
       profilePhoto: "",
       emergencyContacts: formData.emergencyContact ? [{ name: "", phone: formData.emergencyContact }] : [],
       emergencyContact: formData.emergencyContact || "",

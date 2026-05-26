@@ -79,7 +79,7 @@ export default function Analytics() {
   const { items: users } = useAdminCollection("users");
   const { items: incidents } = useAdminCollection("incidents", { orderBy: "createdAt" });
   const responders = users.filter((user) => isResponderRole(user.role));
-  const approved = responders.filter((user) => user.verificationStatus === "approved" || user.verified === true);
+  const approved = responders.filter((user) => String(user.verificationStatus || "").toUpperCase() === "APPROVED");
   const active = incidents.filter(isActiveIncident);
   const completed = incidents.filter((incident) => [INCIDENT_STATES.RESOLVED, INCIDENT_STATES.CLOSED].includes(normalizeIncidentState(incident.status || incident.lifecycleStage)));
   const today = incidents.filter((incident) => isToday(incident.createdAt));
