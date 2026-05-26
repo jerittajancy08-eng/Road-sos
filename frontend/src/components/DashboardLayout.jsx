@@ -1,7 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth.jsx";
 import BottomNavigation from "./BottomNavigation";
-import { getRoleHomePath, normalizeRole } from "../utils/roleUtils";
+import { getRoleHomePath, isResponderApproved, isResponderRole, normalizeRole } from "../utils/roleUtils";
 import LoadingRoadSOS from "./LoadingRoadSOS";
 
 function effectiveDashboardRole(profile) {
@@ -16,6 +16,7 @@ export default function DashboardLayout({ navRole, allowedRoles }) {
 
   const currentRole = effectiveDashboardRole(user);
   const layoutRole = normalizeRole(navRole || currentRole);
+  const dispatchEnabled = isResponderRole(layoutRole) && isResponderApproved({ ...user, role: layoutRole });
 
   if (allowedRoles?.length && !allowedRoles.includes(currentRole)) {
     const redirectTo = getRoleHomePath(currentRole);
@@ -31,7 +32,7 @@ export default function DashboardLayout({ navRole, allowedRoles }) {
         <div className="phone-app-content">
           <Outlet />
         </div>
-        {user && <BottomNavigation role={layoutRole} />}
+        {user && <BottomNavigation role={layoutRole} dispatchEnabled={dispatchEnabled} />}
       </div>
     </div>
   );

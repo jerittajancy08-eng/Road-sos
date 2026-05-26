@@ -17,7 +17,7 @@ const accidentIcon = new L.Icon({
 });
 
 export default function HelperDashboard() {
-  const { dispatchQueue, acceptIncident, rejectIncident, completeIncident, currentUserRole, responderApproved, isOnline, gpsError } = useEmergencyContext();
+  const { dispatchQueue, acceptIncident, rejectIncident, markArrived, completeIncident, currentUserRole, responderApproved, isOnline, gpsError } = useEmergencyContext();
   const requests = dispatchQueue;
   const mapRequests = requests.filter((req) => isValidPosition(req?.pos));
   const mapCenter = safePosition(mapRequests[0]?.pos);
@@ -105,9 +105,10 @@ export default function HelperDashboard() {
                     <div className="flex justify-between text-[10px] font-bold"><span className="uppercase text-slate-500">Status</span><span className="font-black uppercase text-cyan-300">{req.status}</span></div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-4 gap-2">
                     <button onClick={() => acceptIncident(req.id)} className="rounded-2xl bg-cyan-600 py-3 text-[10px] font-black uppercase tracking-widest text-white">Accept</button>
                     <button onClick={() => rejectIncident(req.id)} className="rounded-2xl border border-white/10 bg-white/[0.03] py-3 text-[10px] font-black uppercase tracking-widest text-slate-300">Reject</button>
+                    <button onClick={() => markArrived(req.id)} className="rounded-2xl bg-amber-600 py-3 text-[10px] font-black uppercase tracking-widest text-white">Arrived</button>
                     <button onClick={() => completeIncident(req.id)} className="rounded-2xl bg-emerald-600 py-3 text-[10px] font-black uppercase tracking-widest text-white">Done</button>
                   </div>
                 </motion.div>

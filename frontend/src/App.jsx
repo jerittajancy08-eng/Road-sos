@@ -9,11 +9,16 @@ import ProtectionScreen from "./screens/ProtectionScreen";
 import ActivityScreen from "./screens/ActivityScreen";
 import IncidentsScreen from "./screens/IncidentsScreen";
 import ResponderMapScreen from "./screens/ResponderMapScreen";
+import UserHomePage from "./pages/UserHomePage";
+import UserMapPage from "./pages/UserMapPage";
+import UserIncidentsPage from "./pages/UserIncidentsPage";
+import UserProfilePage from "./pages/UserProfilePage";
 import HelperDashboard from "./components/HelperDashboard";
 import HospitalDashboard from "./components/HospitalDashboard";
 import PoliceDashboard from "./components/PoliceDashboard";
 import AdminLayout from "./admin/AdminLayout";
-import AdminDashboardScreen from "./screens/AdminDashboard";
+import AdminLogin from "./admin/AdminLogin";
+import AdminDashboardScreen from "./admin/AdminDashboard";
 import ResponderApprovals from "./admin/ResponderApprovals";
 import LiveIncidents from "./admin/LiveIncidents";
 import DispatchCenter from "./admin/DispatchCenter";
@@ -24,6 +29,7 @@ import LoadingRoadSOS from "./components/LoadingRoadSOS";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import { FireLayout, HelperLayout, HospitalLayout, PoliceLayout, UserLayout } from "./components/DashboardLayout";
 import { normalizeRole } from "./utils/roleUtils";
+import { loginAdmin } from "./services/authService";
 import "./index.css";
 
 function rolePath(role) {
@@ -58,9 +64,20 @@ function PrivateRoute({ children }) {
 function AdminRoute({ children }) {
   const { user, authLoading } = useAuth();
   if (authLoading) return <LoadingRoadSOS />;
-  if (!user) return <Navigate to="/signin" replace />;
+  if (!user) return <Navigate to="/admin/login" replace />;
   if ((user?.role || "user") !== "admin") return <Navigate to={rolePath(effectiveDashboardRole(user))} replace />;
   return children;
+}
+
+function AdminLoginRoute() {
+  const { user, authLoading } = useAuth();
+  const navigate = useNavigate();
+  if (authLoading) return <LoadingRoadSOS />;
+  if (user && (user.role === "admin" || user.isAdmin === true)) return <Navigate to="/admin" replace />;
+  return <AdminLogin onAdminSignIn={async (credentials) => {
+    await loginAdmin(credentials);
+    navigate("/admin", { replace: true });
+  }} />;
 }
 
 function App() {
@@ -124,10 +141,12 @@ function App() {
       />
 
       <Route element={<PrivateRoute><UserLayout /></PrivateRoute>}>
-        <Route path="/user/home" element={<HomeScreen />} />
+        <Route path="/user/home" element={<UserHomePage />} />
+        <Route path="/user/map" element={<UserMapPage />} />
+        <Route path="/user/incidents" element={<UserIncidentsPage />} />
         <Route path="/user/protection" element={<ProtectionScreen />} />
         <Route path="/user/activity" element={<ActivityScreen />} />
-        <Route path="/user/profile" element={<ProfileScreen />} />
+        <Route path="/user/profile" element={<UserProfilePage />} />
         <Route path="/user/tracking" element={<LiveTrackingScreen />} />
         <Route path="/home" element={<Navigate to="/user/home" replace />} />
         <Route path="/profile" element={<Navigate to="/user/profile" replace />} />
@@ -177,7 +196,7 @@ function App() {
         element={
           <PrivateRoute>
             <Navigate
-              to={effectiveDashboardRole(user) === "user" ? "/user/home" : `/${effectiveDashboardRole(user)}/map`}
+              to={effectiveDashboardRole(user) === "user" ? "/user/map" : `/${effectiveDashboardRole(user)}/map`}
               replace
             />
           </PrivateRoute>
@@ -185,7 +204,12 @@ function App() {
       />
       <Route
         path="/incidents"
-        element={<PrivateRoute><Navigate to={effectiveDashboardRole(user) === "user" ? "/user/activity" : `/${effectiveDashboardRole(user)}/incidents`} replace /></PrivateRoute>}
+        element={<PrivateRoute><Navigate to={effectiveDashboardRole(user) === "user" ? "/user/incidents" : `/${effectiveDashboardRole(user)}/incidents`} replace /></PrivateRoute>}
+      />
+
+      <Route
+        path="/admin/login"
+        element={<AdminLoginRoute />}
       />
 
       <Route

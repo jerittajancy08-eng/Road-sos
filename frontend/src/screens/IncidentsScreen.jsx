@@ -1,13 +1,23 @@
 import { CheckCircle, Clock, AlertCircle } from "lucide-react";
 import { useEmergencyContext } from '../hooks/EmergencyContext';
 import VerificationPendingCard from "../components/VerificationPendingCard";
+import { INCIDENT_STATES, formatLabel, normalizeIncidentState } from "../admin/adminUtils";
+
+const terminal = [INCIDENT_STATES.RESOLVED, INCIDENT_STATES.CLOSED, "REJECTED"];
+
+function incidentDate(value) {
+  if (value?.toDate) return value.toDate();
+  if (value?.toMillis) return new Date(value.toMillis());
+  const parsed = value ? new Date(value) : null;
+  return parsed && parsed.toString() !== "Invalid Date" ? parsed : null;
+}
 
 export default function IncidentsScreen() {
   const { currentUserRole, userProfile, dispatchQueue, incidents, responders, acceptHelperAlert, responderApproved } = useEmergencyContext();
   const isUser = currentUserRole === "user";
   const userIncidents = incidents.filter((incident) => incident.userId === userProfile?.uid || incident.createdBy === userProfile?.uid || incident.reporterId === userProfile?.uid);
-  const completedIncidents = incidents.filter((incident) => ["completed", "resolved"].includes(incident.status));
-  const visibleActive = isUser ? userIncidents.filter((incident) => !["completed", "resolved"].includes(incident.status)) : dispatchQueue;
+  const completedIncidents = incidents.filter((incident) => terminal.includes(normalizeIncidentState(incident.status || incident.lifecycleStage)));
+  const visibleActive = isUser ? userIncidents.filter((incident) => !terminal.includes(normalizeIncidentState(incident.status || incident.lifecycleStage))) : dispatchQueue;
 
   if (isUser) {
     return (
@@ -19,7 +29,7 @@ export default function IncidentsScreen() {
           {userIncidents.length > 0 ? userIncidents.map((incident) => {
             const responderRecord = incident.responders?.find((item) => item.uid === incident.assignedResponderId) || incident.responders?.[0];
             const responder = responderRecord || responders.find((item) => item.id === incident.assignedResponderId || item.id === incident.responderId);
-            const created = incident.timestamp?.toDate ? incident.timestamp.toDate() : incident.timestamp ? new Date(incident.timestamp) : new Date(incident.time || Date.now());
+            const created = incidentDate(incident.createdAt) || incidentDate(incident.timestamp) || incidentDate(incident.time);
             const responseSeconds = incident.assignedAt?.toMillis && incident.createdAt?.toMillis
               ? Math.max(0, Math.round((incident.assignedAt.toMillis() - incident.createdAt.toMillis()) / 1000))
               : incident.etaSeconds || incident.eta || 0;
@@ -28,14 +38,14 @@ export default function IncidentsScreen() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-white">{incident.type || incident.emergencyType || "Emergency"}</p>
-                    <p className="mt-1 text-xs text-slate-400">{created.toLocaleString()}</p>
+                    <p className="mt-1 text-xs text-slate-400">{created ? created.toLocaleString() : "Timestamp syncing"}</p>
                   </div>
-                  <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] uppercase tracking-[0.25em] text-slate-300">{incident.status}</span>
+                  <span className="rounded-full bg-white/5 px-2.5 py-1 text-[10px] uppercase tracking-[0.25em] text-slate-300">{formatLabel(normalizeIncidentState(incident.status || incident.lifecycleStage))}</span>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
                   <div className="rounded-2xl bg-white/5 p-3">
                     <p className="text-slate-500">Responder</p>
-                    <p className="mt-1 font-semibold text-white">{responder?.name || responder?.fullName || incident.assignedResponderId || "Not assigned"}</p>
+                    <p className="mt-1 font-semibold text-white">{responder?.name || responder?.fullName || "Not assigned"}</p>
                     {responder?.role && <p className="mt-1 text-[10px] uppercase tracking-widest text-slate-500">{responder.role}</p>}
                   </div>
                   <div className="rounded-2xl bg-white/5 p-3">
@@ -44,13 +54,13 @@ export default function IncidentsScreen() {
                   </div>
                   <div className="col-span-2 rounded-2xl bg-white/5 p-3">
                     <p className="text-slate-500">Resolved</p>
-                    <p className="mt-1 font-semibold text-white">{incident.completedAt?.toDate ? incident.completedAt.toDate().toLocaleString() : incident.resolvedAt?.toDate ? incident.resolvedAt.toDate().toLocaleString() : "Not resolved yet"}</p>
+                    <p className="mt-1 font-semibold text-white">{incidentDate(incident.completedAt)?.toLocaleString() || incidentDate(incident.resolvedAt)?.toLocaleString() || "Not resolved yet"}</p>
                   </div>
                   <div className="col-span-2 rounded-2xl bg-white/5 p-3">
                     <p className="text-slate-500">Timeline</p>
                     <div className="mt-2 space-y-1">
-                      {(incident.activity || []).slice(0, 4).map((event, index) => (
-                        <p key={index} className="text-[10px] text-slate-300 capitalize">{event.action} by {event.actorName || "system"}</p>
+                      {(incident.statusHistory || incident.activity || []).slice(0, 4).map((event, index) => (
+                        <p key={index} className="text-[10px] text-slate-300 capitalize">{formatLabel(event.status || event.action)} by {event.actorName || "system"}</p>
                       ))}
                     </div>
                   </div>
@@ -91,7 +101,7 @@ export default function IncidentsScreen() {
                 {incident.status}
               </span>
             </div>
-            {['helper', 'police', 'hospital', 'fire'].includes(currentUserRole) && ['active', 'assigned', 'detected', 'dispatched'].includes(incident.status) && (
+            {['helper', 'police', 'hospital', 'fire'].includes(currentUserRole) && [INCIDENT_STATES.DETECTED, INCIDENT_STATES.PENDING_RESPONSE].includes(normalizeIncidentState(incident.status || incident.lifecycleStage)) && (
               <button
                 type="button"
                 onClick={() => acceptHelperAlert(incident.id)}
@@ -118,7 +128,7 @@ export default function IncidentsScreen() {
             <div key={record.id} className="rounded-[28px] bg-slate-950/90 px-4 py-3 shadow-[0_20px_50px_rgba(0,0,0,0.24)] ring-1 ring-white/10 backdrop-blur-xl">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-white">{record.emergencyType || 'Emergency'} completed</p>
-                <span className="text-[10px] text-slate-400">{new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <span className="text-[10px] text-slate-400">{(incidentDate(record.resolvedAt) || incidentDate(record.completedAt) || incidentDate(record.createdAt))?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || "Synced"}</span>
               </div>
               <p className="text-xs text-slate-500 mt-2">Severity {record.severity}</p>
             </div>

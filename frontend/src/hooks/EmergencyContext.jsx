@@ -4,22 +4,26 @@ import { useAuth } from "./useAuth.jsx";
 import { db } from "../firebase";
 import { isResponderApproved, isResponderRole, normalizeRole } from "../utils/roleUtils";
 import { CHENNAI_COORDINATES, isValidCoordinate, isValidPosition, positionFromLatLng } from "../utils/coordinateUtils";
+import { INCIDENT_STATES, estimateEtaSeconds, getPosition, normalizeIncidentCategory, normalizeIncidentState } from "../admin/adminUtils";
 
 const EmergencyContext = createContext();
 
-const terminalStatuses = ["completed", "resolved", "rejected"];
+const terminalStatuses = [INCIDENT_STATES.RESOLVED, INCIDENT_STATES.CLOSED, "REJECTED"];
 
 function isActiveIncident(incident) {
-  return incident && !terminalStatuses.includes(String(incident.status).toLowerCase());
+  return incident && !terminalStatuses.includes(normalizeIncidentState(incident.status || incident.lifecycleStage));
 }
 
 function makeIncident({ lat, lng, userProfile, severity = "high" }) {
   const now = new Date().toISOString();
   return {
     id: `SOS-${Date.now()}`,
-    type: "Emergency",
+    category: normalizeIncidentCategory("emergency"),
+    type: normalizeIncidentCategory("emergency"),
+    emergencyType: normalizeIncidentCategory("emergency"),
     severity,
-    status: "detected",
+    status: INCIDENT_STATES.DETECTED,
+    lifecycleStage: INCIDENT_STATES.DETECTED,
     pos: [lat, lng],
     lat,
     lng,
@@ -36,7 +40,7 @@ function makeIncident({ lat, lng, userProfile, severity = "high" }) {
     activity: [{ action: "created", actorName: userProfile.name, at: now }],
     timestamp: now,
     time: Date.now(),
-    etaSeconds: 180,
+    etaSeconds: null,
   };
 }
 
@@ -102,31 +106,31 @@ export function EmergencyProvider({ children }) {
       return undefined;
     }
 
-    const unsubscribe = onSnapshot(
-      collection(db, "users"),
-      (snapshot) => {
-        setResponders(
-          snapshot.docs
-            .map((item) => ({ id: item.id, ...item.data() }))
-            .filter((item) => isResponderRole(item.role) && isResponderApproved(item))
-            .map((item) => ({
-              ...item,
-              pos: item.liveLocation
-                ? positionFromLatLng(item.liveLocation.lat, item.liveLocation.lng)
-                : item.lastKnownLocation
-                  ? positionFromLatLng(item.lastKnownLocation.lat, item.lastKnownLocation.lng)
-                  : null,
-              status: item.availability === false || item.availability === "offline" ? "offline" : "available",
-            }))
-            .filter((item) => item.pos),
-        );
-      },
-      (snapshotError) => {
-        console.error("Failed to sync responders:", snapshotError);
-      },
-    );
+    const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+      setResponders(
+        snapshot.docs
+          .map((item) => ({ id: item.id, uid: item.id, ...item.data() }))
+          .filter((item) => isResponderRole(item.role) && isResponderApproved(item))
+          .map((item) => ({ ...item, pos: getPosition(item), status: item.availability === false || item.availability === "offline" ? "offline" : item.availability || "available" }))
+          .filter((item) => item.pos),
+      );
+    }, (snapshotError) => console.error("Failed to sync responders:", snapshotError));
 
-    return () => unsubscribe();
+    const unsubLive = onSnapshot(collection(db, "responders"), (snapshot) => {
+      setResponders((current) => {
+        const byId = new Map(current.map((item) => [item.uid || item.id, item]));
+        snapshot.docs.forEach((item) => {
+          const live = { id: item.id, uid: item.id, ...item.data() };
+          byId.set(live.uid || live.id, { ...(byId.get(live.uid || live.id) || {}), ...live, pos: getPosition(live) });
+        });
+        return Array.from(byId.values()).filter((item) => isResponderRole(item.role) && (item.verified === true || isResponderApproved(item)) && item.pos);
+      });
+    }, (snapshotError) => console.error("Failed to sync live responders:", snapshotError));
+
+    return () => {
+      unsubUsers();
+      unsubLive();
+    };
   }, [user?.uid]);
 
   useEffect(() => {
@@ -145,18 +149,34 @@ export function EmergencyProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation || !user?.uid) return undefined;
+    const persistPosition = (position) => {
+      if (!isValidCoordinate(position.coords.latitude, position.coords.longitude)) return;
+      const nextPosition = [position.coords.latitude, position.coords.longitude];
+      setUserPosState(nextPosition);
+      setGpsError("");
+      const locationPatch = {
+        liveLocation: { lat: nextPosition[0], lng: nextPosition[1], accuracy: position.coords.accuracy || null, updatedAt: serverTimestamp() },
+        lastKnownLocation: { lat: nextPosition[0], lng: nextPosition[1] },
+        updatedAt: serverTimestamp(),
+      };
+      setDoc(doc(db, "users", user.uid), locationPatch, { merge: true }).catch((locationError) => console.error("Failed to sync user GPS:", locationError));
+      if (isResponderRole(effectiveRole) && responderApproved) {
+        setDoc(doc(db, "responders", user.uid), { ...locationPatch, uid: user.uid, role: effectiveRole, name: userProfile.name, verified: true, online: true }, { merge: true }).catch((locationError) => console.error("Failed to sync responder GPS:", locationError));
+      }
+    };
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (isValidCoordinate(position.coords.latitude, position.coords.longitude)) {
-          setUserPosState([position.coords.latitude, position.coords.longitude]);
-        }
-        setGpsError("");
-      },
+      persistPosition,
       () => setGpsError("Location unavailable"),
       { enableHighAccuracy: true, maximumAge: 10000, timeout: 9000 },
     );
-  }, []);
+    const watchId = navigator.geolocation.watchPosition(
+      persistPosition,
+      () => setGpsError("Location permission or signal unavailable"),
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 },
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [effectiveRole, responderApproved, user?.uid, userProfile.name]);
 
   const userIncidents = useMemo(
     () => incidents.filter((incident) => incident.userId === userProfile.uid || incident.createdBy === userProfile.uid || incident.reporterId === userProfile.uid),
@@ -169,7 +189,11 @@ export function EmergencyProvider({ children }) {
   const activeEmergency = Boolean(activeIncident);
   const emergencyStatus = activeIncident?.status || "Idle";
   const helperIncomingAlerts = dispatchQueue.filter(isActiveIncident);
-  const eta = activeIncident?.etaSeconds || 0;
+  const assignedResponder = responders.find((responder) => {
+    const responderId = responder.uid || responder.id;
+    return activeIncident?.assignedResponderId === responderId || activeIncident?.responders?.some((item) => item.uid === responderId || item.id === responderId);
+  });
+  const eta = activeIncident && assignedResponder ? estimateEtaSeconds(assignedResponder, activeIncident) : activeIncident?.etaSeconds || 0;
   const ambPos = activeIncident?.responders?.[0]?.location
     ? [activeIncident.responders[0].location.lat, activeIncident.responders[0].location.lng]
     : userPos;
@@ -178,9 +202,9 @@ export function EmergencyProvider({ children }) {
     initials: String(responder.name || "RS").split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
     name: responder.name || "Responder",
     distance: responder.role || "Responder",
-    status: responder.status || "accepted",
-    accepted: ["accepted", "enroute", "arrived", "completed"].includes(responder.status),
-    reached: ["arrived", "completed"].includes(responder.status),
+    status: normalizeIncidentState(responder.status || INCIDENT_STATES.RESPONDER_ASSIGNED),
+    accepted: [INCIDENT_STATES.RESPONDER_ASSIGNED, INCIDENT_STATES.EN_ROUTE, INCIDENT_STATES.ACTIVE_RESCUE, INCIDENT_STATES.RESOLVED].includes(normalizeIncidentState(responder.status)),
+    reached: [INCIDENT_STATES.ACTIVE_RESCUE, INCIDENT_STATES.RESOLVED].includes(normalizeIncidentState(responder.status)),
   }));
 
   const addActivity = ({ title, subtitle, severity = "INFO" }) => {
@@ -199,6 +223,11 @@ export function EmergencyProvider({ children }) {
     setUserPosState([lat, lng]);
     await setDoc(doc(db, "incidents", incident.id), {
       ...incident,
+      category: normalizeIncidentCategory(incident.category || incident.type || incident.emergencyType),
+      type: normalizeIncidentCategory(incident.type || incident.category || incident.emergencyType),
+      emergencyType: normalizeIncidentCategory(options.type || incident.emergencyType || incident.type || incident.category),
+      responderStatus: "AWAITING_RESPONSE",
+      statusHistory: [{ status: INCIDENT_STATES.DETECTED, actorName: userProfile.name, at: new Date().toISOString() }],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -213,6 +242,11 @@ export function EmergencyProvider({ children }) {
   const toggleProtection = () => {
     setProtectionEnabled((prev) => {
       const next = !prev;
+      if (user?.uid) {
+        setDoc(doc(db, "users", user.uid), { protectionEnabled: next, updatedAt: serverTimestamp() }, { merge: true }).catch((protectionError) => {
+          console.error("Failed to update protection setting:", protectionError);
+        });
+      }
       addActivity({
         title: next ? "Protection active" : "Protection paused",
         subtitle: "Protection setting updated",
@@ -237,35 +271,61 @@ export function EmergencyProvider({ children }) {
       return;
     }
     updateIncident(incidentId, (incident) => {
+      const normalizedStatus = normalizeIncidentState(status);
       const responders = (incident.responders || []).filter((item) => item.uid !== userProfile.uid);
+      const etaSeconds = estimateEtaSeconds({ pos: userPos }, incident);
       const nextResponder = {
         uid: userProfile.uid,
         name: userProfile.name,
         role: effectiveRole,
         phone: userProfile.phone,
-        eta: Math.max(1, Math.ceil((incident.etaSeconds || 180) / 60)),
-        status,
+        eta: etaSeconds ? Math.max(1, Math.ceil(etaSeconds / 60)) : null,
+        etaSeconds,
+        status: normalizedStatus,
         location: { lat: userPos[0], lng: userPos[1] },
         updatedAt: new Date().toISOString(),
       };
       return {
         ...incident,
-        status,
+        status: normalizedStatus,
+        lifecycleStage: normalizedStatus,
         assignedResponderId: status === "rejected" ? incident.assignedResponderId : userProfile.uid,
         responders: status === "rejected" ? responders : [...responders, nextResponder],
+        responderStatus: status === "rejected" ? "REJECTED" : normalizedStatus,
+        etaSeconds: etaSeconds || incident.etaSeconds || null,
         activity: [
           ...(incident.activity || []),
-          { action: status, actorName: userProfile.name, role: effectiveRole, at: new Date().toISOString() },
+          { action: normalizedStatus, actorName: userProfile.name, role: effectiveRole, at: new Date().toISOString() },
         ],
-        completedAt: status === "completed" || status === "resolved" ? new Date().toISOString() : incident.completedAt,
+        statusHistory: [
+          ...(incident.statusHistory || []),
+          { status: normalizedStatus, actorName: userProfile.name, role: effectiveRole, at: new Date().toISOString() },
+        ],
+        completedAt: terminalStatuses.includes(normalizedStatus) ? new Date().toISOString() : incident.completedAt,
+        resolvedAt: normalizedStatus === INCIDENT_STATES.RESOLVED ? serverTimestamp() : incident.resolvedAt,
       };
     });
+    const normalizedStatus = normalizeIncidentState(status);
+    if (status !== "rejected") {
+      setDoc(doc(db, "responders", userProfile.uid), {
+        uid: userProfile.uid,
+        name: userProfile.name,
+        role: effectiveRole,
+        assignedIncidentId: terminalStatuses.includes(normalizedStatus) ? "" : incidentId,
+        status: terminalStatuses.includes(normalizedStatus) ? "AVAILABLE" : normalizedStatus,
+        availability: terminalStatuses.includes(normalizedStatus) ? "AVAILABLE" : "BUSY",
+        available: terminalStatuses.includes(normalizedStatus),
+        liveLocation: { lat: userPos[0], lng: userPos[1], updatedAt: serverTimestamp() },
+        updatedAt: serverTimestamp(),
+      }, { merge: true }).catch((responderError) => console.error("Failed to sync responder state:", responderError));
+    }
     addActivity({ title: `Help ${status}`, subtitle: `${userProfile.name} marked a help request ${status}` });
   };
 
-  const acceptIncident = (incidentId) => updateIncidentWithResponder(incidentId, "accepted");
+  const acceptIncident = (incidentId) => updateIncidentWithResponder(incidentId, INCIDENT_STATES.RESPONDER_ASSIGNED);
   const rejectIncident = (incidentId) => updateIncidentWithResponder(incidentId, "rejected");
-  const completeIncident = (incidentId) => updateIncidentWithResponder(incidentId, "completed");
+  const markArrived = (incidentId) => updateIncidentWithResponder(incidentId, INCIDENT_STATES.ACTIVE_RESCUE);
+  const completeIncident = (incidentId) => updateIncidentWithResponder(incidentId, INCIDENT_STATES.RESOLVED);
   const assignResponderToIncident = (incidentId) => acceptIncident(incidentId);
   const acceptHelperAlert = (incidentId) => acceptIncident(incidentId);
   const updateIncidentStatus = (incidentId, status) => updateIncidentWithResponder(incidentId, status);
@@ -314,6 +374,7 @@ export function EmergencyProvider({ children }) {
       rejectIncident,
       updateIncidentStatus,
       completeIncident,
+      markArrived,
       setResponderAvailability,
       acceptHelperAlert,
       addActivity,

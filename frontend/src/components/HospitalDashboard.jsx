@@ -3,7 +3,7 @@ import { useEmergencyContext } from "../hooks/EmergencyContext";
 import VerificationPendingCard from "./VerificationPendingCard";
 
 export default function HospitalDashboard() {
-  const { dispatchQueue, acceptIncident, completeIncident, userProfile, responderApproved, isOnline } = useEmergencyContext();
+  const { dispatchQueue, acceptIncident, markArrived, completeIncident, userProfile, responderApproved, isOnline } = useEmergencyContext();
   const incomingPatients = dispatchQueue.filter((incident) => String(incident.severity).toLowerCase() === "high" || incident.status !== "completed");
 
   return (
@@ -63,8 +63,9 @@ export default function HospitalDashboard() {
                     <div className="rounded-2xl bg-white/[0.04] p-3"><p className="text-slate-500">Reporter</p><p className="mt-1 font-bold text-white">{patient.reporter?.name || "RoadSOS User"}</p></div>
                     <div className="rounded-2xl bg-white/[0.04] p-3"><p className="text-slate-500">Status</p><p className="mt-1 font-bold capitalize text-white">{patient.status}</p></div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <button onClick={() => acceptIncident(patient.id)} className="rounded-2xl bg-emerald-600 py-3 text-[10px] font-black uppercase tracking-widest text-white">Accept Intake</button>
+                    <button onClick={() => markArrived(patient.id)} className="rounded-2xl bg-amber-600 py-3 text-[10px] font-black uppercase tracking-widest text-white">Arrived</button>
                     <button onClick={() => completeIncident(patient.id)} className="rounded-2xl border border-white/10 bg-white/[0.03] py-3 text-[10px] font-black uppercase tracking-widest text-slate-300">Complete</button>
                   </div>
                 </motion.div>

@@ -196,7 +196,7 @@ export async function registerUser(formData) {
       requestedRole: selectedRole,
       verified: selectedRole === "user",
       profilePhoto: "",
-      emergencyContacts: formData.emergencyContact ? [{ name: "Primary", phone: formData.emergencyContact }] : [],
+      emergencyContacts: formData.emergencyContact ? [{ name: "", phone: formData.emergencyContact }] : [],
       emergencyContact: formData.emergencyContact || "",
       bloodGroup: formData.bloodGroup || "",
       allergies: formData.allergies || "",

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import { loginUser, registerUser, logoutUser } from "../services/authService";
 
@@ -17,31 +17,44 @@ export function AuthProvider({ children }) {
   const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeProfile = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
+
       if (!firebaseUser) {
         setUser(null);
         setAuthLoading(false);
         return;
       }
 
-      try {
-        const userDoc = await getDoc(doc(db, "users", firebaseUser.uid));
-        if (userDoc.exists()) {
-          const nextUser = { uid: firebaseUser.uid, email: firebaseUser.email, ...userDoc.data() };
-          setUser(nextUser);
-        } else {
-          console.error("[RoadSOS auth]", { status: "missing-profile", uid: firebaseUser.uid });
+      setAuthLoading(true);
+      unsubscribeProfile = onSnapshot(
+        doc(db, "users", firebaseUser.uid),
+        (userDoc) => {
+          if (userDoc.exists()) {
+            setUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...userDoc.data() });
+          } else {
+            console.error("[RoadSOS auth]", { status: "missing-profile", uid: firebaseUser.uid });
+            setUser(null);
+          }
+          setAuthLoading(false);
+        },
+        (error) => {
+          console.error("Failed to load user profile:", error);
           setUser(null);
-        }
-      } catch (error) {
-        console.error("Failed to load user profile:", error);
-        setUser(null);
-      } finally {
-        setAuthLoading(false);
-      }
+          setAuthLoading(false);
+        },
+      );
     });
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubscribeProfile) unsubscribeProfile();
+      unsubscribeAuth();
+    };
   }, []);
 
   const login = async (credentials) => {
