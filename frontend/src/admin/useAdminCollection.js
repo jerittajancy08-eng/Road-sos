@@ -15,6 +15,9 @@ export function useAdminCollection(collectionName, options = {}) {
     const unsubscribe = onSnapshot(
       source,
       (snapshot) => {
+        if (collectionName === "users" || collectionName === "responders") {
+          console.log("[RoadSOS firestore listener]", { collectionName, size: snapshot.size });
+        }
         setItems(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
         setLoading(false);
       },

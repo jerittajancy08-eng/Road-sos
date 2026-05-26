@@ -36,7 +36,7 @@ export default function LiveIncidents() {
     .map((incident) => ({ incident, pos: getPosition(incident) }))
     .filter((item) => item.pos);
   const positionedResponders = (Array.isArray(responders) ? responders : [])
-    .filter((responder) => responder?.verified === true || responder?.verificationStatus === "approved")
+    .filter((responder) => String(responder?.verificationStatus || "").toUpperCase() === "APPROVED")
     .map((responder) => ({ responder, pos: getPosition(responder) }))
     .filter((item) => item.pos);
   const center = positionedIncidents[0]?.pos;

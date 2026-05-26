@@ -6,6 +6,7 @@ import VerificationPendingCard from "./VerificationPendingCard";
 import { dispatchTitles } from "../utils/roleUtils";
 import LoadingMap from "./LoadingMap";
 import { safePosition, isValidPosition } from "../utils/coordinateUtils";
+import { INCIDENT_STATES, distanceScore, estimateEtaSeconds, formatLabel, normalizeIncidentState } from "../admin/adminUtils";
 
 const accidentIcon = new L.Icon({
   iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
@@ -17,15 +18,19 @@ const accidentIcon = new L.Icon({
 });
 
 export default function HelperDashboard() {
-  const { dispatchQueue, acceptIncident, rejectIncident, markArrived, completeIncident, currentUserRole, responderApproved, isOnline, gpsError } = useEmergencyContext();
+  const { dispatchQueue, acceptIncident, rejectIncident, markEnRoute, markArrived, completeIncident, currentUserRole, responderApproved, isOnline, gpsError, userPos, userProfile } = useEmergencyContext();
   const requests = dispatchQueue;
   const mapRequests = requests.filter((req) => isValidPosition(req?.pos));
   const mapCenter = safePosition(mapRequests[0]?.pos);
 
   const calculateDistance = (req) => {
-    if (!req?.lat || !req?.lng) return "--";
-    return "Nearby";
+    const km = distanceScore({ pos: userPos }, req);
+    return Number.isFinite(km) ? `${km.toFixed(1)} km` : "--";
   };
+
+  const getRequestStatus = (req) => normalizeIncidentState(req.status || req.lifecycleStage);
+  const isRequestAssignedToMe = (req) => req.assignedResponderId === userProfile.uid;
+  const isRequestAssignedElsewhere = (req) => req.assignedResponderId && req.assignedResponderId !== userProfile.uid;
 
   return (
     <div className="min-h-full px-4 pt-4">
@@ -101,15 +106,48 @@ export default function HelperDashboard() {
                   </div>
 
                   <div className="mb-4 space-y-2">
-                    <div className="flex justify-between text-[10px] font-bold"><span className="uppercase text-slate-500">Location</span><span className="text-white">{calculateDistance(req)}</span></div>
-                    <div className="flex justify-between text-[10px] font-bold"><span className="uppercase text-slate-500">Status</span><span className="font-black uppercase text-cyan-300">{req.status}</span></div>
+                    <div className="flex justify-between text-[10px] font-bold"><span className="uppercase text-slate-500">Distance</span><span className="text-white">{calculateDistance(req)}</span></div>
+                    <div className="flex justify-between text-[10px] font-bold"><span className="uppercase text-slate-500">ETA</span><span className="text-white">{estimateEtaSeconds({ pos: userPos }, req) ? `${Math.ceil(estimateEtaSeconds({ pos: userPos }, req) / 60)} min` : "Updating"}</span></div>
+                    <div className="flex justify-between text-[10px] font-bold"><span className="uppercase text-slate-500">Status</span><span className="font-black uppercase text-cyan-300">{formatLabel(normalizeIncidentState(req.status))}</span></div>
+                    {req.assignedResponderId && req.assignedResponderId !== userProfile.uid && <p className="text-[10px] text-slate-500">Assigned to another responder</p>}
                   </div>
 
-                  <div className="grid grid-cols-4 gap-2">
-                    <button onClick={() => acceptIncident(req.id)} className="rounded-2xl bg-cyan-600 py-3 text-[10px] font-black uppercase tracking-widest text-white">Accept</button>
-                    <button onClick={() => rejectIncident(req.id)} className="rounded-2xl border border-white/10 bg-white/[0.03] py-3 text-[10px] font-black uppercase tracking-widest text-slate-300">Reject</button>
-                    <button onClick={() => markArrived(req.id)} className="rounded-2xl bg-amber-600 py-3 text-[10px] font-black uppercase tracking-widest text-white">Arrived</button>
-                    <button onClick={() => completeIncident(req.id)} className="rounded-2xl bg-emerald-600 py-3 text-[10px] font-black uppercase tracking-widest text-white">Done</button>
+                  <div className="grid grid-cols-5 gap-2">
+                    <button
+                      disabled={isRequestAssignedElsewhere(req) || ![INCIDENT_STATES.DETECTED, INCIDENT_STATES.REJECTED].includes(getRequestStatus(req))}
+                      onClick={() => acceptIncident(req.id)}
+                      className="rounded-2xl bg-cyan-600 py-3 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-40"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      disabled={isRequestAssignedElsewhere(req)}
+                      onClick={() => rejectIncident(req.id)}
+                      className="rounded-2xl border border-white/10 bg-white/[0.03] py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 disabled:opacity-40"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      disabled={!isRequestAssignedToMe(req) || getRequestStatus(req) !== INCIDENT_STATES.ACCEPTED}
+                      onClick={() => markEnRoute(req.id)}
+                      className="rounded-2xl bg-blue-600 py-3 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-40"
+                    >
+                      Route
+                    </button>
+                    <button
+                      disabled={!isRequestAssignedToMe(req) || getRequestStatus(req) !== INCIDENT_STATES.EN_ROUTE}
+                      onClick={() => markArrived(req.id)}
+                      className="rounded-2xl bg-amber-600 py-3 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-40"
+                    >
+                      Arrived
+                    </button>
+                    <button
+                      disabled={!isRequestAssignedToMe(req) || getRequestStatus(req) !== INCIDENT_STATES.ARRIVED}
+                      onClick={() => completeIncident(req.id)}
+                      className="rounded-2xl bg-emerald-600 py-3 text-[10px] font-black uppercase tracking-widest text-white disabled:opacity-40"
+                    >
+                      Done
+                    </button>
                   </div>
                 </motion.div>
               ))

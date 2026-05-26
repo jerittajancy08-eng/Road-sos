@@ -26,7 +26,7 @@ export default function ResponderVerificationSection({ profile }) {
     "";
   const city = details.city || profile?.city || "";
   const fileName = details.fileName || profile?.verificationFileName || "";
-  const status = profile?.verificationStatus || "pending";
+  const status = profile?.verificationStatus || "PENDING";
 
   return (
     <div className="glass-panel p-5 border-white/10 relative overflow-hidden">

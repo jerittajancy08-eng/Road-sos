@@ -2,14 +2,25 @@ import { AlertCircle, MapPin, Clock, CheckCircle, Navigation, Power } from "luci
 import { useEmergencyContext } from '../hooks/EmergencyContext';
 import VerificationPendingCard from "../components/VerificationPendingCard";
 import { dispatchTitles } from "../utils/roleUtils";
+import { INCIDENT_STATES, formatLabel, normalizeIncidentState } from "../admin/adminUtils";
 
 export default function DispatchScreen() {
   const { dispatchQueue, assignResponderToIncident, acceptIncident, rejectIncident, currentUserRole, userProfile, responders, updateIncidentStatus, completeIncident, setResponderAvailability, toast, responderApproved, isOnline, gpsError } = useEmergencyContext();
   const responderDoc = responders.find((item) => item.id === userProfile?.uid);
   const activeIncident = dispatchQueue.find((incident) => incident.assignedResponderId === userProfile?.uid) || dispatchQueue[0];
+  const incidentStatus = activeIncident ? normalizeIncidentState(activeIncident.status || activeIncident.lifecycleStage) : null;
   const isAssignedToMe = activeIncident?.assignedResponderId === userProfile?.uid;
   const isResponder = ['helper', 'police', 'hospital', 'fire'].includes(currentUserRole);
   const mapLink = activeIncident?.pos ? `https://maps.google.com/?q=${activeIncident.pos[0]},${activeIncident.pos[1]}` : null;
+  const activeStatusText = incidentStatus === INCIDENT_STATES.ACCEPTED
+    ? 'Responder assigned'
+    : incidentStatus === INCIDENT_STATES.EN_ROUTE
+    ? 'Responder en route'
+    : incidentStatus === INCIDENT_STATES.ARRIVED
+    ? 'Responder has arrived'
+    : incidentStatus === INCIDENT_STATES.RESOLVED
+    ? 'Incident resolved'
+    : formatLabel(incidentStatus || 'idle');
 
   return (
     <div className="relative z-10 flex h-full flex-col px-5 pt-6 pb-28 text-white overflow-y-auto">
@@ -60,14 +71,35 @@ export default function DispatchScreen() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock className="h-3.5 w-3.5 text-slate-500" />
-                    <span>{activeIncident.status === 'accepted' || activeIncident.status === 'in_progress' ? 'Responder active' : activeIncident.status}</span>
+                    <span>{activeStatusText}</span>
                   </div>
                 </div>
               </div>
-              {isResponder && isAssignedToMe && activeIncident.status === "assigned" ? (
+              {isResponder && isAssignedToMe && incidentStatus === INCIDENT_STATES.ACCEPTED ? (
+                <button
+                  onClick={() => markEnRoute(activeIncident.id)}
+                  className="rounded-2xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-400 transition"
+                >
+                  Route
+                </button>
+              ) : isResponder && isAssignedToMe && incidentStatus === INCIDENT_STATES.EN_ROUTE ? (
+                <button
+                  onClick={() => markArrived(activeIncident.id)}
+                  className="rounded-2xl bg-amber-500 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-400 transition"
+                >
+                  Arrived
+                </button>
+              ) : isResponder && isAssignedToMe && incidentStatus === INCIDENT_STATES.ARRIVED ? (
+                <button
+                  onClick={() => completeIncident(activeIncident.id)}
+                  className="rounded-2xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-400 transition"
+                >
+                  Done
+                </button>
+              ) : [INCIDENT_STATES.DETECTED, INCIDENT_STATES.REJECTED].includes(incidentStatus) ? (
                 <div className="flex flex-col gap-2">
                   <button
-                    onClick={() => acceptIncident(activeIncident.id)}
+                    onClick={() => currentUserRole === "helper" ? acceptIncident(activeIncident.id) : assignResponderToIncident(activeIncident.id)}
                     className="rounded-2xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-400 transition"
                   >
                     Accept
@@ -79,28 +111,7 @@ export default function DispatchScreen() {
                     Reject
                   </button>
                 </div>
-              ) : ["active", "dispatched", "detected"].includes(activeIncident.status) ? (
-                <button
-                  onClick={() => currentUserRole === "helper" ? acceptIncident(activeIncident.id) : assignResponderToIncident(activeIncident.id)}
-                  className="rounded-2xl bg-cyan-500 px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-400 transition"
-                >
-                  Accept
-                </button>
-              ) : activeIncident.status === "in_progress" ? (
-                <button
-                  onClick={() => completeIncident(activeIncident.id)}
-                  className="rounded-2xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-400 transition"
-                >
-                  Mark completed
-                </button>
-              ) : (
-                <button
-                  onClick={() => updateIncidentStatus(activeIncident.id, "in_progress")}
-                  className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-semibold text-white hover:bg-white/20 transition"
-                >
-                  Reached location
-                </button>
-              )}
+              ) : null}
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3">
               {mapLink && (

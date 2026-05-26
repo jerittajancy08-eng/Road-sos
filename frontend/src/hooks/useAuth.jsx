@@ -36,7 +36,9 @@ export function AuthProvider({ children }) {
         doc(db, "users", firebaseUser.uid),
         (userDoc) => {
           if (userDoc.exists()) {
-            setUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...userDoc.data() });
+            const data = userDoc.data();
+            console.log("[RoadSOS auth profile]", { uid: firebaseUser.uid, verificationStatus: data.verificationStatus, role: data.role });
+            setUser({ uid: firebaseUser.uid, email: firebaseUser.email, ...data });
           } else {
             console.error("[RoadSOS auth]", { status: "missing-profile", uid: firebaseUser.uid });
             setUser(null);

@@ -74,7 +74,7 @@ export default function DispatchCenter() {
         badgeId: getLicense(responder),
         unitLabel: getResponderUnitLabel(responder),
         phone: responder.phone || "",
-        verified: true,
+        verificationStatus: "APPROVED",
         availability: RESPONDER_STATES.BUSY,
         status: RESPONDER_STATES.BUSY,
         missionState: RESPONDER_STATES.RESPONDING,
