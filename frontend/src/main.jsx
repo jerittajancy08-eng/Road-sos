@@ -5,7 +5,8 @@ import App from "./App.jsx";
 import { AuthProvider } from "./hooks/useAuth";
 import { EmergencyProvider } from "./hooks/EmergencyContext";
 import "./index.css";
-
+import { registerSW } from 'virtual:pwa-register';
+registerSW({ immediate: true });
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
